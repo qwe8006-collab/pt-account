@@ -507,7 +507,7 @@ def get_attendance_badge_html(status):
 
 
 # =========================================================
-# 3. 3-STEP 바이오 프로파일 HTML 생성기
+# 3. 3-STEP 바이오 프로파일 HTML 생성기 (-ing 제거 깔끔한 명사형)
 # =========================================================
 def build_4step_report_html(member, report):
     try: posture_list = json.loads(report.get("posture_eval") or "[]")
@@ -577,7 +577,7 @@ def build_4step_report_html(member, report):
   <div class="cover-sheet">
     <div>
       <div style="font-size: 13px; font-weight: 800; color: #60A5FA; letter-spacing: 2px;">SPECIAL BIO-PROFILE REPORT</div>
-      <div class="cover-title">3-STEP 바이오 프로파일<br/><span style="font-size:24px; font-weight:600; color:#93C5FD;">[맞춤 체형 정밀 분석 & 바이오 프로파일ing 로드맵]</span></div>
+      <div class="cover-title">3-STEP 바이오 프로파일<br/><span style="font-size:24px; font-weight:600; color:#93C5FD;">[맞춤 체형 정밀 분석 & 바이오 프로파일 로드맵]</span></div>
       <div class="cover-badge">3 STEP PT</div>
     </div>
     <div class="cover-meta">
