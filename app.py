@@ -232,18 +232,18 @@ def get_month_weeks_list(year, month):
     return [f"{w}주차" for w in range(1, len(cal) + 1)]
 
 
-# [개선 및 고도화] 자연스러운 전문가 수준 피드백 정제 엔진
+# [고도화] 어색함 없는 고품격 자연스러운 전문가 피드백 정제 엔진
 def refine_journal_feedback(text, is_good=True):
     if not text or not str(text).strip():
         if is_good:
-            return "설정된 목표 자극점에 정확히 집중하여 주동근 수축감을 매우 효율적으로 형성하셨습니다."
+            return "목표 자극점에 정확히 집중하여 주동근 수축감을 매우 효율적으로 형성하셨습니다."
         else:
             return "동작 수행 시 코어 지지력과 관절 가동 범위를 지속 체크하여 움직임의 안정성을 극대화하겠습니다."
             
     t = str(text).strip()
     
     if is_good:
-        # 단어 수준 정규식 케어
+        # 단어 및 짧은 구문 입력 대응
         if re.search(r"^가슴$", t):
             return "가슴 부위 주동근(대흉근) 자극 전달에 집중하여 수축감과 견갑골 정렬을 매우 안정적으로 유지하셨습니다."
         elif re.search(r"^등$", t):
@@ -254,15 +254,15 @@ def refine_journal_feedback(text, is_good=True):
             return "고관절 및 대퇴사두근 수축 타이밍을 정확히 맞추어 하중 분산을 안정적으로 가져가셨습니다."
 
         replacements = [
-            (r"처음.*동작.*이해|이해도.*좋|이해.*잘|빠름", "새로운 운동 동작 패턴임에도 불구하고 빠른 운동 학습 능력(Motor Learning)과 우수한 고유수용성 감각을 바탕으로 목표 주동근의 수축 자극을 효율적으로 형성하셨습니다."),
-            (r"자극점.*찾음|자극점.*타겟|자극.*좋음|타겟.*좋음", "목표 주동근의 정확한 자극점을 인지하고 주동근 고립 자극을 효율적으로 전달하셨습니다."),
-            (r"자세.*잘\s*잡힘|자세.*좋음|궤적.*좋음", "관절 정렬 및 동작 궤적이 매우 안정적으로 고립되어 완성도 높은 운동을 수행하셨습니다."),
-            (r"복압.*잘\s*잡음|코어.*좋음|중심.*잡힘", "호흡 패턴을 통한 코어 복압을 견고하게 유지하여 하중을 효과적으로 분산하셨습니다."),
+            (r"처음.*동작.*이해|이해도.*좋|이해.*잘|빠름", "새로운 운동 동작 패턴임에도 불구하고 우수한 고유수용성 감각과 운동 학습 능력을 바탕으로 목표 주동근 자극을 효율적으로 형성하셨습니다."),
+            (r"자극점.*찾음|자극점.*타겟|자극.*좋음|타겟.*좋음", "목표 주동근의 정확한 타겟점을 인지하고 고립 수축 자극을 효율적으로 전달하셨습니다."),
+            (r"자세.*잘\s*잡힘|자세.*좋음|궤적.*좋음", "관절 정렬 및 동작 궤적이 매우 안정적으로 제어되어 완성도 높은 운동을 수행하셨습니다."),
+            (r"복압.*잘\s*잡음|코어.*좋음|중심.*잡힘", "호흡 패턴을 통한 코어 복압을 견고하게 유지하여 운동 수행 시 신체 하중을 안정적으로 분산하셨습니다."),
         ]
         for pattern, repl in replacements:
             if re.search(pattern, t):
                 return repl
-        return f"오늘 수행하신 '{t}' 운동에서 관절 정렬과 목표 주동근 자극 전달력이 매우 양호하게 관찰되었습니다."
+        return f"오늘 진행한 '{t}' 영역 수행 시 정확한 관절 정렬과 목표 주동근 자극 전달력이 매우 양호하게 관찰되었습니다."
     else:
         replacements = [
             (r"흔들림|흔들|몸통.*불안정|중심.*불안정", "동작 수행 시 코어 복압 유지와 요·휘두 관절 복합체(LSC)의 동적 안정성을 보완하여 움직임의 흔들림을 최소화해 드리겠습니다."),
@@ -1010,7 +1010,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
 
 # =========================================================
-# 5. 페이지: 수업 등록
+# 5. 페이지: 수업 등록 (잔여 회차 0회 예약 차단 검증 반영)
 # =========================================================
 def page_booking(members, bookings):
     st.title("🗓️ 수업 등록 & 스케줄 달력")
@@ -1143,20 +1143,26 @@ def page_booking(members, bookings):
                     cand_idx = st.selectbox("예약할 회원 선택", range(len(cand_options)), format_func=lambda i: cand_options[i], key="cand_select_new")
 
                     if st.button("✅ 선택한 시간으로 수업 예약 확정", type="primary", use_container_width=True):
-                        dup_check = active_bookings[(active_bookings["date"] == sel_date) & (active_bookings["time_slot"] == sel_slot)]
-                        if not dup_check.empty:
-                            st.error("⚠️ 예약할 수 없습니다! 해당 날짜와 시간대에 이미 등록된 수업이 있습니다.")
+                        chosen = candidates.iloc[cand_idx]
+                        chosen_rem_s = safe_int(chosen.get("remaining_sessions"), 0)
+
+                        # [핵심 추가] 잔여 회차 0회 차단 검증
+                        if chosen_rem_s <= 0:
+                            st.error(f"⚠️ {chosen['name']} 회원의 잔여 세션이 0회입니다! 세션 재등록 후 예약을 진행해 주세요.")
                         else:
-                            chosen = candidates.iloc[cand_idx]
-                            new_booking = {
-                                "booking_id": next_id(bookings, "booking_id"),
-                                "member_id": int(chosen["member_id"]), "date": sel_date,
-                                "time_slot": sel_slot, "status": "예약됨",
-                            }
-                            bookings = pd.concat([bookings, pd.DataFrame([new_booking])], ignore_index=True)
-                            save_bookings(bookings)
-                            st.toast(f"{chosen['name']} 회원이 {sel_date} {sel_slot}에 예약되었습니다.")
-                            rerun()
+                            dup_check = active_bookings[(active_bookings["date"] == sel_date) & (active_bookings["time_slot"] == sel_slot)]
+                            if not dup_check.empty:
+                                st.error("⚠️ 예약할 수 없습니다! 해당 날짜와 시간대에 이미 등록된 수업이 있습니다.")
+                            else:
+                                new_booking = {
+                                    "booking_id": next_id(bookings, "booking_id"),
+                                    "member_id": int(chosen["member_id"]), "date": sel_date,
+                                    "time_slot": sel_slot, "status": "예약됨",
+                                }
+                                bookings = pd.concat([bookings, pd.DataFrame([new_booking])], ignore_index=True)
+                                save_bookings(bookings)
+                                st.toast(f"{chosen['name']} 회원이 {sel_date} {sel_slot}에 예약되었습니다.")
+                                rerun()
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -1604,7 +1610,7 @@ def page_bodyplan(members, reports):
 
 
 # =========================================================
-# 8. 페이지: 수업일지 작성 (히스토리 & 원클릭 복가 탑재)
+# 8. 페이지: 수업일지 작성 (히스토리 & 원클릭 복사 탑재)
 # =========================================================
 def page_journal(members, logs):
     st.title("📝 수업일지 작성 & 카톡 전송")
