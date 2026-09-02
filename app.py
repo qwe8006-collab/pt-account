@@ -232,6 +232,7 @@ def get_month_weeks_list(year, month):
     return [f"{w}주차" for w in range(1, len(cal) + 1)]
 
 
+# [고도화 1] 전문 체육학/운동생리학 정제 AI 에이전트 엔진
 def refine_journal_feedback(text, is_good=True):
     if not text or not str(text).strip():
         if is_good:
@@ -243,24 +244,25 @@ def refine_journal_feedback(text, is_good=True):
     
     if is_good:
         replacements = [
-            (r"자극점.*찾음|자극점.*타겟|자극.*좋음|타겟.*좋음", "목표 주동근의 정확한 자극점을 인지하고 수축 자극을 효율적으로 전달하셨습니다."),
+            (r"처음.*동작.*이해|이해도.*좋|이해.*잘|빠름", "새로운 운동 동작 패턴임에도 불구하고 빠른 운동 학습 능력(Motor Learning)과 우수한 고유수용성 감각을 바탕으로 목표 주동근의 수축 자극을 효율적으로 형성하셨습니다."),
+            (r"자극점.*찾음|자극점.*타겟|자극.*좋음|타겟.*좋음", "목표 주동근의 정확한 자극점을 인지하고 주동근 고립 자극을 효율적으로 전달하셨습니다."),
             (r"자세.*잘\s*잡힘|자세.*좋음|궤적.*좋음", "관절 정렬 및 동작 궤적이 매우 안정적으로 고립되어 완성도 높은 운동을 수행하셨습니다."),
             (r"복압.*잘\s*잡음|코어.*좋음|중심.*잡힘", "호흡 패턴을 통한 코어 복압을 견고하게 유지하여 하중을 효과적으로 분산하셨습니다."),
         ]
         for pattern, repl in replacements:
             if re.search(pattern, t):
                 return repl
-        return f"오늘 수업에서 '{t}' 요소를 훌륭하게 수행하시어 주동근 자극과 동작 완성도가 눈에 띄게 향상되었습니다."
+        return f"오늘 수행하신 '{t}' 동작에서 관절 정렬과 목표 주동근 자극 전달력이 매우 양호하게 관찰되었습니다."
     else:
         replacements = [
+            (r"흔들림|흔들|몸통.*불안정|중심.*불안정", "동작 수행 시 코어 복압 유지와 요·휘두 관절 복합체(LSC)의 동적 안정성을 보완하여 움직임의 흔들림을 최소화해 드리겠습니다."),
             (r"근력.*약함|힘.*부족", "점진적 과부하 트레이닝을 위해 주요 관절 주변부 지지 근력 및 코어 안정성을 지속적으로 보완해 나가겠습니다."),
-            (r"밀때.*몸이\s*흔들림|흔들림|불안정", "프레스 및 타겟 동작 수행 시 신체 중심부 지지력을 향상시켜 움직임의 흔들림을 최소화하겠습니다."),
             (r"가동성.*부족|범위.*안나옴|타이트", "타이트해진 주요 관절 주변 근막을 원활히 이완하여 정상 가동 범위(ROM)를 확보해 나가겠습니다."),
         ]
         for pattern, repl in replacements:
             if re.search(pattern, t):
                 return repl
-        return f"다음 수업 시 '{t}' 요소를 디테일하게 케어하여 더욱 부상 없이 완벽한 자세 정렬을 만들어 드리겠습니다."
+        return f"다음 수업 시 '{t}' 요소를 생체역학적으로 디테일하게 케어하여 더욱 부상 없이 완벽한 자세 정렬을 만들어 드리겠습니다."
 
 
 def refine_raw_text(text, category="general"):
@@ -425,7 +427,7 @@ def next_id(df, id_col):
     return int(pd.to_numeric(df[id_col], errors="coerce").fillna(0).max()) + 1
 
 
-# [핵심 개편] 다음 수업 자동 탐색 및 잔여 세션 포함 카카오톡 메시지 생성기
+# 다음 수업 자동 탐색 및 통합 피드백 메시지 생성기
 def generate_friendly_message_from_data(member_id, member_name, rem_sessions, exercises_df, good, improve):
     ex_summary = []
     if isinstance(exercises_df, pd.DataFrame) and not exercises_df.empty:
@@ -441,7 +443,6 @@ def generate_friendly_message_from_data(member_id, member_name, rem_sessions, ex
     g_text = good if good else "오늘도 설정한 운동 목표 루틴을 깔끔하게 완수하셨습니다!"
     i_text = improve if improve else "다음 수업 때는 자세 정렬에 조금 더 신경 써볼게요."
 
-    # 🔍 예약 DB에서 '오늘 이후' 가장 가까운 다음 수업 탐색
     next_class_text = ""
     try:
         bookings_df = st.session_state.get("bookings_df", fetch_table("bookings", BOOKINGS_COLUMNS))
@@ -1593,7 +1594,7 @@ def page_bodyplan(members, reports):
 
 
 # =========================================================
-# 8. 페이지: 수업일지 작성 & 카톡 스마트 템플릿 생성
+# 8. 페이지: 수업일지 작성 (통합 템플릿 출력)
 # =========================================================
 def page_journal(members, logs):
     st.title("📝 수업일지 작성 & 카톡 전송")
@@ -1648,48 +1649,26 @@ def page_journal(members, logs):
     st.markdown('<div class="pt-card">', unsafe_allow_html=True)
     st.markdown("##### ✏️ 피드백 메모 기입")
 
-    good_raw = st.text_input("오늘 잘한 점 (메모)", placeholder="예시: 자극점 잘 잡아서 목표부위 타겟 좋음")
-    improve_raw = st.text_input("보완할 점 (메모)", placeholder="예시: 자세는 좋지만 몸의 안정성 향상이 더필요할듯")
+    good_raw = st.text_input("오늘 잘한 점 (메모)", placeholder="예시: 처음하는 동작인데도 불구하고 운동이해력이 좋으심")
+    improve_raw = st.text_input("보완할 점 (메모)", placeholder="예시: 아직 초반이라 그런지 몸통이 많이 흔들리심")
 
-    if st.button("🤖 AI 수업 피드백 문장 자동 완성", type="primary"):
+    if st.button("🤖 AI 수업 피드백 문장 고도화 완성", type="primary"):
         g_ref = refine_journal_feedback(good_raw, is_good=True)
         i_ref = refine_journal_feedback(improve_raw, is_good=False)
 
         st.session_state["journal_good_ai"] = g_ref
         st.session_state["journal_improve_ai"] = i_ref
-        st.toast("AI 수업 피드백 문장이 완벽하게 정제되었습니다!")
+        st.toast("AI 수업 피드백 문장이 전문가 수준으로 정제되었습니다!")
 
-    good_points = st.text_area("✔ 잘하신 점 (AI 정제 결과)", value=st.session_state.get("journal_good_ai", good_raw), height=70)
-    improve_points = st.text_area("✔ 보완할 점 (AI 정제 결과)", value=st.session_state.get("journal_improve_ai", improve_raw), height=70)
+    good_points = st.text_area("✔ 잘하신 점 (AI 전문 정제 결과)", value=st.session_state.get("journal_good_ai", good_raw), height=85)
+    improve_points = st.text_area("✔ 보완할 점 (AI 전문 정제 결과)", value=st.session_state.get("journal_improve_ai", improve_raw), height=85)
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("---")
-    st.markdown(f"#### 📱 '{member['name']}' 회원 전송용 카카오톡 스마트 템플릿")
+    st.markdown(f"#### 📱 '{member['name']}' 회원 전송용 실시간 통합 메시지")
 
-    msg_type = st.radio("전송할 메시지 유형 선택", ["📝 수업일지 피드백", "⏰ 수업 예약 안내", "🚨 재등록 안내"], horizontal=True)
-
-    if msg_type == "📝 수업일지 피드백":
-        # [수정] m_id 및 rem_sessions_val 추가하여 자동 탐색 로직 연결
-        live_msg = generate_friendly_message_from_data(m_id, member["name"], rem_sessions_val, edited_df, good_points, improve_points)
-    elif msg_type == "⏰ 수업 예약 안내":
-        live_msg = f"""안녕하세요 {member['name']} 회원님! {MY_NAME} 트레이너입니다. 😊
-
-다음 PT 수업 안내해 드립니다.
-
-🗓️ 수업 날짜: {log_date.strftime('%Y년 %m월 %d일')}
-⏰ 수업 시간: {start_time_sel} ~ {auto_end_time}
-📍 장소: 센터 웨이트 존
-
-수업 변경 필요시 최소 하루 전에 미리 말씀해 주세요! 
-내일도 건강한 모습으로 뵙겠습니다. 감사합니다! 🔥"""
-    else: # 🚨 재등록 안내
-        live_msg = f"""안녕하세요 {member['name']} 회원님! {MY_NAME} 트레이너입니다. 💪
-
-회원님의 현재 남아있는 PT 세션은 [ {rem_sessions_val}회 ] 입니다.
-원활한 수업 스케줄 고정 및 지속적인 운동 목표 달성을 위해 재등록 안내 도와드립니다.
-
-궁금하신 점이나 스케줄 상담은 편하게 말씀해 주세요! 
-늘 열심히 임해주셔서 감사합니다! 🙏"""
+    # [수정] 라디오 버튼 완전 제거 후 자동 연동된 통합 메시지 1종으로 전송
+    live_msg = generate_friendly_message_from_data(m_id, member["name"], rem_sessions_val, edited_df, good_points, improve_points)
 
     st.code(live_msg, language=None)
 
