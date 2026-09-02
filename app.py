@@ -232,7 +232,7 @@ def get_month_weeks_list(year, month):
     return [f"{w}주차" for w in range(1, len(cal) + 1)]
 
 
-# [고도화 1] 전문 체육학/운동생리학 정제 AI 에이전트 엔진
+# [개선 및 고도화] 자연스러운 전문가 수준 피드백 정제 엔진
 def refine_journal_feedback(text, is_good=True):
     if not text or not str(text).strip():
         if is_good:
@@ -243,6 +243,16 @@ def refine_journal_feedback(text, is_good=True):
     t = str(text).strip()
     
     if is_good:
+        # 단어 수준 정규식 케어
+        if re.search(r"^가슴$", t):
+            return "가슴 부위 주동근(대흉근) 자극 전달에 집중하여 수축감과 견갑골 정렬을 매우 안정적으로 유지하셨습니다."
+        elif re.search(r"^등$", t):
+            return "등 부위 주동근(광배근 및 승모근) 신전 시 타겟 자극을 효율적으로 집중시키며 수행하셨습니다."
+        elif re.search(r"^어깨$", t):
+            return "삼각근 고립 자극 및 관절 궤적을 안정적으로 제어하며 완성도 높은 훈련을 수행하셨습니다."
+        elif re.search(r"^하체$", t):
+            return "고관절 및 대퇴사두근 수축 타이밍을 정확히 맞추어 하중 분산을 안정적으로 가져가셨습니다."
+
         replacements = [
             (r"처음.*동작.*이해|이해도.*좋|이해.*잘|빠름", "새로운 운동 동작 패턴임에도 불구하고 빠른 운동 학습 능력(Motor Learning)과 우수한 고유수용성 감각을 바탕으로 목표 주동근의 수축 자극을 효율적으로 형성하셨습니다."),
             (r"자극점.*찾음|자극점.*타겟|자극.*좋음|타겟.*좋음", "목표 주동근의 정확한 자극점을 인지하고 주동근 고립 자극을 효율적으로 전달하셨습니다."),
@@ -252,7 +262,7 @@ def refine_journal_feedback(text, is_good=True):
         for pattern, repl in replacements:
             if re.search(pattern, t):
                 return repl
-        return f"오늘 수행하신 '{t}' 동작에서 관절 정렬과 목표 주동근 자극 전달력이 매우 양호하게 관찰되었습니다."
+        return f"오늘 수행하신 '{t}' 운동에서 관절 정렬과 목표 주동근 자극 전달력이 매우 양호하게 관찰되었습니다."
     else:
         replacements = [
             (r"흔들림|흔들|몸통.*불안정|중심.*불안정", "동작 수행 시 코어 복압 유지와 요·휘두 관절 복합체(LSC)의 동적 안정성을 보완하여 움직임의 흔들림을 최소화해 드리겠습니다."),
@@ -1594,7 +1604,7 @@ def page_bodyplan(members, reports):
 
 
 # =========================================================
-# 8. 페이지: 수업일지 작성 (통합 템플릿 출력)
+# 8. 페이지: 수업일지 작성 (히스토리 & 원클릭 복가 탑재)
 # =========================================================
 def page_journal(members, logs):
     st.title("📝 수업일지 작성 & 카톡 전송")
@@ -1649,8 +1659,8 @@ def page_journal(members, logs):
     st.markdown('<div class="pt-card">', unsafe_allow_html=True)
     st.markdown("##### ✏️ 피드백 메모 기입")
 
-    good_raw = st.text_input("오늘 잘한 점 (메모)", placeholder="예시: 처음하는 동작인데도 불구하고 운동이해력이 좋으심")
-    improve_raw = st.text_input("보완할 점 (메모)", placeholder="예시: 아직 초반이라 그런지 몸통이 많이 흔들리심")
+    good_raw = st.text_input("오늘 잘한 점 (메모)", placeholder="예시: 가슴 또는 처음하는 동작인데도 이해력이 좋으심")
+    improve_raw = st.text_input("보완할 점 (메모)", placeholder="예시: 몸통이 많이 흔들리심")
 
     if st.button("🤖 AI 수업 피드백 문장 고도화 완성", type="primary"):
         g_ref = refine_journal_feedback(good_raw, is_good=True)
@@ -1667,10 +1677,21 @@ def page_journal(members, logs):
     st.markdown("---")
     st.markdown(f"#### 📱 '{member['name']}' 회원 전송용 실시간 통합 메시지")
 
-    # [수정] 라디오 버튼 완전 제거 후 자동 연동된 통합 메시지 1종으로 전송
     live_msg = generate_friendly_message_from_data(m_id, member["name"], rem_sessions_val, edited_df, good_points, improve_points)
 
     st.code(live_msg, language=None)
+
+    # [추가 기능 1] 카카오톡 피드백 메시지 원클릭 클립보드 복사 버튼
+    encoded_msg = base64.b64encode(live_msg.encode('utf-8')).decode('utf-8')
+    copy_html = f"""
+    <div style="margin-top:-8px; margin-bottom:16px;">
+        <button onclick="navigator.clipboard.writeText(atob('{encoded_msg}')); alert('카카오톡 피드백 문구가 클립보드에 복사되었습니다! 카톡에 바로 붙여넣기(Ctrl+V) 하세요.');" 
+                style="background-color:#2563EB; color:white; border:none; padding:10px 18px; border-radius:8px; font-weight:800; cursor:pointer;">
+            📋 카카오톡 전송 문구 복사하기
+        </button>
+    </div>
+    """
+    components.html(copy_html, height=50)
 
     if st.button("✅ 일지 저장 (세션 -1 차감)", type="primary", use_container_width=True):
         if rem_sessions_val <= 0:
@@ -1698,6 +1719,22 @@ def page_journal(members, logs):
     if st.session_state.get("log_saved_success", False):
         st.toast(f"🎉 '{member['name']}' 회원의 일지가 정상 등록되었습니다!", icon="✅")
         st.session_state["log_saved_success"] = False
+
+    # [추가 기능 3] 해당 회원의 과거 수업일지 피드백 히스토리 타임라인
+    st.write("")
+    with st.expander(f"📜 '{member['name']}' 회원의 이전 수업일지 & 피드백 히스토리 복기"):
+        m_logs = logs[pd.to_numeric(logs["member_id"], errors="coerce") == m_id].sort_values("date", ascending=False)
+        if m_logs.empty:
+            st.caption("기록된 과거 수업일지가 없습니다.")
+        else:
+            for _, l_row in m_logs.iterrows():
+                st.markdown(f"""
+                <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; padding:12px 16px; margin-bottom:8px;">
+                    <div style="font-weight:800; color:{COLOR_BLUE}; font-size:14px;">📅 {l_row['date']} ({l_row.get('start_time','-')} ~ {l_row.get('end_time','-')})</div>
+                    <div style="font-size:13px; color:#334155; margin-top:4px;"><b>✔ 잘한점:</b> {l_row.get('good_points','-')}</div>
+                    <div style="font-size:13px; color:#334155; margin-top:2px;"><b>✔ 보완점:</b> {l_row.get('improve_points','-')}</div>
+                </div>
+                """, unsafe_allow_html=True)
 
 
 # =========================================================
