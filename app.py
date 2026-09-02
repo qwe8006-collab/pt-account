@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 3-STEP 바디 메핑 리포트 시스템
 ================================================================================
 """
 
@@ -232,7 +232,7 @@ def get_month_weeks_list(year, month):
     return [f"{w}주차" for w in range(1, len(cal) + 1)]
 
 
-# [고도화] 어색함 없는 고품격 자연스러운 전문가 피드백 정제 엔진
+# [고도화] 자연스러운 전문가 수준 피드백 정제 엔진
 def refine_journal_feedback(text, is_good=True):
     if not text or not str(text).strip():
         if is_good:
@@ -243,7 +243,6 @@ def refine_journal_feedback(text, is_good=True):
     t = str(text).strip()
     
     if is_good:
-        # 단어 및 짧은 구문 입력 대응
         if re.search(r"^가슴$", t):
             return "가슴 부위 주동근(대흉근) 자극 전달에 집중하여 수축감과 견갑골 정렬을 매우 안정적으로 유지하셨습니다."
         elif re.search(r"^등$", t):
@@ -275,35 +274,42 @@ def refine_journal_feedback(text, is_good=True):
         return f"다음 수업 시 '{t}' 요소를 생체역학적으로 디테일하게 케어하여 더욱 부상 없이 완벽한 자세 정렬을 만들어 드리겠습니다."
 
 
+# [핵심 개편] 단어 어미 정제 및 전문 해부학/생체역학 문장 가공 엔진
 def refine_raw_text(text, category="general"):
     if not text or not str(text).strip():
         return "미입력 (기본 평가 데이터 없음)"
     
     t = str(text).strip()
+    # 어미 (~하심, ~함, ~임, ~음) 정리
+    clean_t = re.sub(r"(하심|함|임|음|있음|보임|같음)$", "", t).strip()
     
     if category == "goal":
-        if re.search(r"다이어트|근력증가|체지방", t):
-            return "체지방 감량 및 골격근량 증대를 통한 신체 밸런스 라인 형성"
-        return t
-
-    elif category == "journal":
-        return t
+        if re.search(r"다이어트|근력증가|체지방", clean_t):
+            return "체지방 순감량 및 골격근량 증대를 통한 신체 밸런스 라인 형성"
+        return f"{clean_t} 및 신체 전반의 기능적 밸런스 회복"
 
     elif category == "posture":
-        if re.search(r"골반.*전방경사|전방경사", t):
-            return "골반 전방 경사(Pelvic Anterior Tilt) 패턴으로 인한 요추 하중 집중 및 요부 근막 긴장"
-        elif re.search(r"오른쪽.*골반|골반.*틀어짐", t):
-            return "골반 우측 변위(Pelvic Lateral Deviation) 및 좌우 밸런스 불균형"
-        return t
+        p_text = clean_t
+        if re.search(r"라운드\s*숄더|굽은\s*어깨", p_text):
+            p_text = re.sub(r"라운드\s*숄더|굽은\s*어깨", "상지교차증후군(Upper Crossed) 양상의 라운드 숄더", p_text)
+        if re.search(r"후방\s*경사", p_text):
+            p_text = re.sub(r"후방\s*경사", "골반 후방 경사(Pelvic Posterior Tilt) 패턴", p_text)
+        if re.search(r"전방\s*경사", p_text):
+            p_text = re.sub(r"전방\s*경사", "골반 전방 경사(Pelvic Anterior Tilt) 패턴", p_text)
+        return p_text
 
     elif category == "func":
-        if re.search(r"벗윙크", t):
-            return "딥 스쿼트 시 굴곡 제한에 따른 벗윙크(Butt Wink) 보상 작용 현상"
-        elif re.search(r"유연|부상위험", t):
-            return "관절 가동 범위(ROM)는 양호하나 과가동성(Hyper-mobility) 대비 고관절 고립력 보완 필요"
-        return t
+        f_text = clean_t
+        if re.search(r"내전근|허벅지\s*안쪽", f_text):
+            f_text = re.sub(r"내전근.*약|내전근", "고관절 내전근(Adductor Complex)의 활성도 저하 및 근력 약화", f_text)
+        if re.search(r"벗윙크", f_text):
+            f_text = re.sub(r"벗윙크", "딥 스쿼트 수행 시 굴곡 제한에 따른 벗윙크(Butt Wink) 보상 작용", f_text)
+        return f_text
 
-    return t
+    elif category == "journal":
+        return f"{clean_t} 중심의 맞춤형 훈련 정렬 지도"
+
+    return clean_t
 
 
 # =========================================================
@@ -437,7 +443,6 @@ def next_id(df, id_col):
     return int(pd.to_numeric(df[id_col], errors="coerce").fillna(0).max()) + 1
 
 
-# 다음 수업 자동 탐색 및 통합 피드백 메시지 생성기
 def generate_friendly_message_from_data(member_id, member_name, rem_sessions, exercises_df, good, improve):
     ex_summary = []
     if isinstance(exercises_df, pd.DataFrame) and not exercises_df.empty:
@@ -505,7 +510,7 @@ def get_attendance_badge_html(status):
 
 
 # =========================================================
-# 3. 4STEP PT 전용 리포트 HTML 생성기
+# 3. 3-STEP 바디 메핑 리포트 HTML 생성기 (3STEP 반영)
 # =========================================================
 def build_4step_report_html(member, report):
     try: posture_list = json.loads(report.get("posture_eval") or "[]")
@@ -521,7 +526,7 @@ def build_4step_report_html(member, report):
 <html lang="ko">
 <head>
 <meta charset="UTF-8"/>
-<title>{member.get('name','')} 회원의 내 몸 변화 설계서</title>
+<title>{member.get('name','')} 회원의 3-STEP 바디 메핑 리포트</title>
 <style>
   @page {{ size: A4 portrait; margin: 0; }}
   *, *:before, *:after {{ box-sizing: border-box; }}
@@ -548,7 +553,7 @@ def build_4step_report_html(member, report):
     color: #FFFFFF; display: flex; flex-direction: column; justify-content: space-between;
     page-break-after: always; page-break-inside: avoid;
   }}
-  .cover-title {{ font-size: 44px; font-weight: 900; line-height: 1.2; letter-spacing: -1.5px; margin-top: 35mm; }}
+  .cover-title {{ font-size: 42px; font-weight: 900; line-height: 1.2; letter-spacing: -1.5px; margin-top: 35mm; }}
   .cover-badge {{ background: {COLOR_BLUE}; display: inline-block; padding: 8px 20px; border-radius: 30px; font-size: 18px; font-weight: 800; margin-top: 20px; }}
   .cover-meta {{ border-top: 2px solid rgba(255,255,255,0.2); padding-top: 20px; font-size: 15px; line-height: 1.8; }}
 
@@ -574,15 +579,15 @@ def build_4step_report_html(member, report):
 
   <div class="cover-sheet">
     <div>
-      <div style="font-size: 13px; font-weight: 800; color: #60A5FA; letter-spacing: 2px;">SPECIAL BODY DESIGN REPORT</div>
-      <div class="cover-title">내 몸 변화 설계서<br/><span style="font-size:24px; font-weight:600; color:#93C5FD;">[맞춤 운동 & 체형 분석 플랜]</span></div>
-      <div class="cover-badge">4 STEP PT</div>
+      <div style="font-size: 13px; font-weight: 800; color: #60A5FA; letter-spacing: 2px;">SPECIAL BODY MAPPING REPORT</div>
+      <div class="cover-title">3-STEP 바디 메핑 리포트<br/><span style="font-size:24px; font-weight:600; color:#93C5FD;">[맞춤 체형 정밀 분석 & 트레이닝 로드맵]</span></div>
+      <div class="cover-badge">3 STEP PT</div>
     </div>
     <div class="cover-meta">
       <b>회원명:</b> {member.get('name','')} ({member.get('gender','성별미기재')})<br/>
       <b>운동 목표:</b> {report.get('goal_text', member.get('goal','체형교정 및 근력강화'))}<br/>
       <b>발행일자:</b> {report.get('date', get_kst_now().strftime("%Y-%m-%d"))}<br/>
-      <div style="margin-top: 8px; color: #94A3B8; font-size: 12.5px;">회원님의 몸 상태를 정밀하게 분석하여 작성된 체계적인 변화 설계서입니다.</div>
+      <div style="margin-top: 8px; color: #94A3B8; font-size: 12.5px;">회원님의 몸 상태를 정밀 분석하여 작성된 체계적인 3단계 맞춤 변화 리포트입니다.</div>
       <div style="margin-top: 16px; font-size: 17px; font-weight: 800; color: #60A5FA;">담당 : {MY_NAME} 트레이너</div>
     </div>
   </div>
@@ -590,7 +595,7 @@ def build_4step_report_html(member, report):
   <div class="sheet">
     <div class="header">
       <div>
-        <div style="font-size: 20px; font-weight: 900; color: {COLOR_NAVY};">1. 내 몸 상태 정밀 분석</div>
+        <div style="font-size: 20px; font-weight: 900; color: {COLOR_NAVY};">1. 신체 정밀 메핑 및 상태 분석</div>
         <div style="font-size: 12px; color: #64748B;">이름: {member.get('name','')} | 성별: {member.get('gender','남성')} | 담당: {MY_NAME} 트레이너</div>
       </div>
     </div>
@@ -604,26 +609,26 @@ def build_4step_report_html(member, report):
     <div class="sec-title">자세 / 움직임 정밀 체크</div>
     <div class="grid-2">
       <div class="content-card">
-        <h4 style="margin:0 0 8px; color:{COLOR_BLUE};">📐 자세 체크 (Posture)</h4>
+        <h4 style="margin:0 0 8px; color:{COLOR_BLUE};">📐 자세 정밀 분석 (Posture)</h4>
         {posture_html}
       </div>
       <div class="content-card">
-        <h4 style="margin:0 0 8px; color:{COLOR_BLUE};">🏃 움직임 가동성 (Movement)</h4>
+        <h4 style="margin:0 0 8px; color:{COLOR_BLUE};">🏃 움직임 가동성 분석 (Movement)</h4>
         {func_html}
       </div>
     </div>
 
-    <div class="sec-title">2. 맞춤 운동 로드맵 (Phase 1 ~ 3)</div>
+    <div class="sec-title">2. 3-STEP 맞춤 트레이닝 로드맵 (Phase 1 ~ 3)</div>
     <div class="content-card">
-      <b style="color:{COLOR_BLUE};">Phase 1 [1~4주차: 굳은 관절 이완 & 바른 호흡 정렬 익히기]</b><br/>
+      <b style="color:{COLOR_BLUE};">STEP 1 [1~4주차: 굳은 관절 이완 & 바른 호흡 정렬 익히기]</b><br/>
       <div style="white-space: pre-wrap; margin-top:4px;">{report.get('phase1_text','-')}</div>
     </div>
     <div class="content-card">
-      <b style="color:{COLOR_BLUE};">Phase 2 [5~8주차: 타겟 근육 고립 & 차근차근 부하 적용]</b><br/>
+      <b style="color:{COLOR_BLUE};">STEP 2 [5~8주차: 타겟 근육 고립 & 차근차근 부하 적용]</b><br/>
       <div style="white-space: pre-wrap; margin-top:4px;">{report.get('phase2_text','-')}</div>
     </div>
     <div class="content-card">
-      <b style="color:{COLOR_BLUE};">Phase 3 [9~12주차: 체력 및 근지구력 극대화 & 자율 독립 루틴 완성]</b><br/>
+      <b style="color:{COLOR_BLUE};">STEP 3 [9~12주차: 체력 및 근지구력 극대화 & 자율 독립 루틴 완성]</b><br/>
       <div style="white-space: pre-wrap; margin-top:4px;">{report.get('phase3_text','-')}</div>
     </div>
 
@@ -688,7 +693,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
             rerun()
 
     with cols[3]:
-        st.markdown(f'<div class="pt-metric"><div class="label">작성된 변화설계서</div><div class="value accent">{len(reports)}건</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="pt-metric"><div class="label">작성된 바디메핑 리포트</div><div class="value accent">{len(reports)}건</div></div>', unsafe_allow_html=True)
         if st.button("📑 리포트 목록 보기", key="btn_view_reports", use_container_width=True):
             st.session_state["dash_selected_metric"] = "reports" if st.session_state["dash_selected_metric"] != "reports" else None
             rerun()
@@ -761,7 +766,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
                     """, unsafe_allow_html=True)
 
         elif sel_metric == "reports":
-            st.subheader("📑 작성 완료된 내 몸 변화설계서 목록")
+            st.subheader("📑 작성 완료된 3-STEP 바디 메핑 리포트 목록")
             if reports.empty:
                 st.info("작성된 리포트가 없습니다.")
             else:
@@ -772,7 +777,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
                     st.markdown(f"""
                     <div class="custom-item-card">
                         <div>
-                            <span style="font-size:16px; font-weight:800; color:{COLOR_NAVY};">📄 {r.get('name','회원')} 회원의 변화설계서</span> {g_badge} {deliv_text}
+                            <span style="font-size:16px; font-weight:800; color:{COLOR_NAVY};">📄 {r.get('name','회원')} 회원의 바디 메핑 리포트</span> {g_badge} {deliv_text}
                             <div style="font-size:13px; color:#64748B; margin-top:4px;">🎯 운동목적: {r.get('goal_text','-')}</div>
                         </div>
                         <div style="font-weight:800; color:#64748B;">
@@ -1146,7 +1151,6 @@ def page_booking(members, bookings):
                         chosen = candidates.iloc[cand_idx]
                         chosen_rem_s = safe_int(chosen.get("remaining_sessions"), 0)
 
-                        # [핵심 추가] 잔여 회차 0회 차단 검증
                         if chosen_rem_s <= 0:
                             st.error(f"⚠️ {chosen['name']} 회원의 잔여 세션이 0회입니다! 세션 재등록 후 예약을 진행해 주세요.")
                         else:
@@ -1383,16 +1387,16 @@ def page_re_registration(members, sales):
 
 
 # =========================================================
-# 7. 페이지: AI 내 몸 변화 설계서
+# 7. 페이지: 3-STEP 바디 메핑 리포트 (명칭 및 3STEP 변경 반영)
 # =========================================================
 def page_bodyplan(members, reports):
-    st.title("📋 PT 내 몸 변화 설계서 (AI 고도화 처방)")
+    st.title("📋 PT 3-STEP 바디 메핑 리포트 (AI 고도화 처방)")
 
     if members.empty:
         st.info("등록된 회원이 없습니다.")
         return
 
-    st.subheader("회원 리스트 및 설계서 작성")
+    st.subheader("회원 리스트 및 리포트 작성")
 
     for idx, m in members.iterrows():
         m_id = int(m["member_id"])
@@ -1417,7 +1421,7 @@ def page_bodyplan(members, reports):
                 if cb_deliv != is_deliv_curr:
                     reports.loc[pd.to_numeric(reports["member_id"], errors="coerce") == m_id, "delivered"] = cb_deliv
                     save_reports(reports)
-                    st.toast(f"'{m['name']}' 회원의 설계서 전달 상태가 변경되었습니다.")
+                    st.toast(f"'{m['name']}' 회원의 리포트 전달 상태가 변경되었습니다.")
                     rerun()
             else:
                 st.caption("⏳ 미작성")
@@ -1427,7 +1431,7 @@ def page_bodyplan(members, reports):
             st.markdown(f"<span style='font-size:13px; color:#64748B;'>연락처: {m['contact']} | 담당: {MY_NAME} | 목표: {m.get('goal','-')} | 리포트: {rep_status_html}</span>", unsafe_allow_html=True)
 
         with col_b:
-            btn_label = "✍️ 설계서 수정" if has_report else "➕ 설계서 작성하기"
+            btn_label = "✍️ 리포트 수정" if has_report else "➕ 리포트 작성하기"
             if st.button(btn_label, key=f"btn_write_{m_id}_{idx}", use_container_width=True):
                 st.session_state["editing_member_id"] = m_id
                 st.session_state["show_modal"] = False
@@ -1451,7 +1455,7 @@ def page_bodyplan(members, reports):
         r_dict = target_r.iloc[0].to_dict() if not target_r.empty else {}
 
         st.markdown("---")
-        st.subheader(f"📄 '{target_m['name']}' 회원의 내 몸 변화 설계서 미리보기")
+        st.subheader(f"📄 '{target_m['name']}' 회원의 3-STEP 바디 메핑 리포트 미리보기")
 
         preview_html = build_4step_report_html(target_m, r_dict)
 
@@ -1501,12 +1505,12 @@ def page_bodyplan(members, reports):
         )
         raw_posture = st.text_input(
             "2. 자세 체크 결과", 
-            placeholder="예시: 시상면(Sagittal)상 골반 전방 경사(Pelvic Anterior Tilt) 관찰",
+            placeholder="예시: 라운드숄더 및 골반 후방경사 패턴 관찰",
             key=f"input_posture_{e_id}"
         )
         raw_func = st.text_input(
             "3. 움직임 체크 결과", 
-            placeholder="예시: 딥 스쿼트 수행 시 상체 과굴곡 패턴 및 고관절 가동성 제한",
+            placeholder="예시: 우측 내전근 약화 및 딥 스쿼트 벗윙크 관찰",
             key=f"input_func_{e_id}"
         )
 
@@ -1517,9 +1521,12 @@ def page_bodyplan(members, reports):
             refined_func = refine_raw_text(raw_func, "func")
 
             details_list = []
-            if raw_posture.strip(): details_list.append(f"자세 평가상 {refined_posture} 상태가 관찰되었습니다.")
-            if raw_func.strip(): details_list.append(f"움직임 기능 검사에서 {refined_func} 현상이 확인되었습니다.")
-            if raw_journal.strip(): details_list.append(f"이러한 보상 패턴을 개선하기 위해 진행된 1회차 훈련({refined_journal}) 성과를 바탕으로 로드맵을 적용합니다.")
+            if raw_posture.strip(): 
+                details_list.append(f"자세 정밀 평가 결과 {refined_posture}가 관찰되었습니다.")
+            if raw_func.strip(): 
+                details_list.append(f"움직임 기능 검사에서는 {refined_func} 소견이 확인되었습니다.")
+            if raw_journal.strip(): 
+                details_list.append(f"이러한 신체 보상 패턴을 개선하기 위해 진행된 1회차 훈련({refined_journal}) 성과를 바탕으로 단계별 로드맵을 적용합니다.")
 
             analysis_body = " ".join(details_list) if details_list else "입력된 세부 평가 데이터를 기반으로 맞춤형 개선 플랜을 수립합니다."
 
@@ -1531,18 +1538,18 @@ def page_bodyplan(members, reports):
             st.session_state[f"ai_posture_text_{e_id}"] = f"체형 정렬 평가: {refined_posture}"
             st.session_state[f"ai_func_text_{e_id}"] = f"동작 가동성 평가: {refined_func}"
 
-            st.session_state[f"ta_p1_{e_id}"] = f"Phase 1 [1-4주차: 관절 이완 & 호흡 정렬 익히기]\n• 타이트해진 근막 이완 및 호흡 정렬\n• 훈련 성과 반영: {refined_journal}"
-            st.session_state[f"ta_p2_{e_id}"] = f"Phase 2 [5-8주차: 타겟 근육 고립 & 차근차근 부하 적용]\n• 보상 작용 없이 주동근 고립 자극 전달\n• 개선 과제 반영: {refined_posture} 케어"
-            st.session_state[f"ta_p3_{e_id}"] = f"Phase 3 [9-12주차: 체력 극대화 & 자율 독립 루틴 완성]\n• 맞춤형 자율 운동 프로그램 체득 및 운동 자립 완성\n• 개선 과제 반영: {refined_func} 예방"
+            st.session_state[f"ta_p1_{e_id}"] = f"STEP 1 [1-4주차: 관절 이완 & 호흡 정렬 익히기]\n• 타이트해진 근막 이완 및 호흡 정렬\n• 훈련 성과 반영: {refined_journal}"
+            st.session_state[f"ta_p2_{e_id}"] = f"STEP 2 [5-8주차: 타겟 근육 고립 & 차근차근 부하 적용]\n• 보상 작용 없이 주동근 고립 자극 전달\n• 개선 과제 반영: {refined_posture} 케어"
+            st.session_state[f"ta_p3_{e_id}"] = f"STEP 3 [9-12주차: 체력 극대화 & 자율 독립 루틴 완성]\n• 맞춤형 자율 운동 프로그램 체득 및 운동 자립 완성\n• 개선 과제 반영: {refined_func} 예방"
 
             st.session_state[f"ta_comment_{e_id}"] = f""""{selected_m['name']} 님을 위한 {MY_NAME} 트레이너의 진심 어린 한마디"
 
 {selected_m['name']} 회원님, 담당 트레이너 {MY_NAME}입니다.
 현재 회원님께서 고민하시는 신체 목표나 움직임의 제한은 정확한 생체역학적 원인 분석과 체계적인 로드맵을 통해 충분히 개선할 수 있습니다. 
 
-준비해 드린 12주 간의 Phase 플랜을 따라 차근차근 나아간다면, 불균형했던 관절 정렬이 제자리를 찾고 한층 새로워진 몸의 변화를 직접 경험하시게 될 것입니다. 저를 믿고 편안한 마음으로 따라와 주세요! 화이팅! 🔥"""
+준비해 드린 12주 간의 STEP 플랜을 따라 차근차근 나아간다면, 불균형했던 관절 정렬이 제자리를 찾고 한층 새로워진 몸의 변화를 직접 경험하시게 될 것입니다. 저를 믿고 편안한 마음으로 따라와 주세요! 화이팅! 🔥"""
 
-            st.toast("RAW 데이터가 순수하게 정제되어 각 항목별로 분할 기입되었습니다!")
+            st.toast("RAW 데이터가 순수하고 전문적으로 정제되어 항목별로 분할 기입되었습니다!")
             rerun()
 
         default_analysis = r_row.get("analysis_text") if has_existing else ""
@@ -1558,13 +1565,13 @@ def page_bodyplan(members, reports):
         if f"ta_comment_{e_id}" not in st.session_state: st.session_state[f"ta_comment_{e_id}"] = default_comment
 
         analysis = st.text_area("1. 신체 정밀 종합 분석", height=130, key=f"ta_analysis_{e_id}")
-        p1 = st.text_area("Phase 1 로드맵 (1~4주차)", height=80, key=f"ta_p1_{e_id}")
-        p2 = st.text_area("Phase 2 로드맵 (5~8주차)", height=80, key=f"ta_p2_{e_id}")
-        p3 = st.text_area("Phase 3 로드맵 (9~12주차)", height=80, key=f"ta_p3_{e_id}")
+        p1 = st.text_area("STEP 1 로드맵 (1~4주차)", height=80, key=f"ta_p1_{e_id}")
+        p2 = st.text_area("STEP 2 로드맵 (5~8주차)", height=80, key=f"ta_p2_{e_id}")
+        p3 = st.text_area("STEP 3 로드맵 (9~12주차)", height=80, key=f"ta_p3_{e_id}")
         comment = st.text_area("김준수 트레이너 마스터 응원 코멘트", height=120, key=f"ta_comment_{e_id}")
 
         col_save, col_cancel = st.columns([1, 1])
-        if col_save.button("🚀 최종 설계서 저장 및 리포트 완성", type="primary", use_container_width=True, key=f"btn_save_rep_{e_id}"):
+        if col_save.button("🚀 최종 바디 메핑 리포트 저장 및 완성", type="primary", use_container_width=True, key=f"btn_save_rep_{e_id}"):
             existing_mask = pd.to_numeric(reports["member_id"], errors="coerce") == e_id
 
             posture_text = st.session_state.get(f"ai_posture_text_{e_id}", f"자세 평가: {refine_raw_text(raw_posture, 'posture')}")
@@ -1605,7 +1612,7 @@ def page_bodyplan(members, reports):
         st.markdown('</div>', unsafe_allow_html=True)
 
     if st.session_state.get("report_saved_toast", False):
-        st.toast("🎉 설계서 저장이 완료되었습니다!", icon="✅")
+        st.toast("🎉 바디 메핑 리포트 저장이 완료되었습니다!", icon="✅")
         st.session_state["report_saved_toast"] = False
 
 
@@ -1687,7 +1694,6 @@ def page_journal(members, logs):
 
     st.code(live_msg, language=None)
 
-    # [추가 기능 1] 카카오톡 피드백 메시지 원클릭 클립보드 복사 버튼
     encoded_msg = base64.b64encode(live_msg.encode('utf-8')).decode('utf-8')
     copy_html = f"""
     <div style="margin-top:-8px; margin-bottom:16px;">
@@ -1726,7 +1732,6 @@ def page_journal(members, logs):
         st.toast(f"🎉 '{member['name']}' 회원의 일지가 정상 등록되었습니다!", icon="✅")
         st.session_state["log_saved_success"] = False
 
-    # [추가 기능 3] 해당 회원의 과거 수업일지 피드백 히스토리 타임라인
     st.write("")
     with st.expander(f"📜 '{member['name']}' 회원의 이전 수업일지 & 피드백 히스토리 복기"):
         m_logs = logs[pd.to_numeric(logs["member_id"], errors="coerce") == m_id].sort_values("date", ascending=False)
@@ -2169,7 +2174,7 @@ def main():
             "📊 센터 대시보드", 
             "🗓️ 수업 등록", 
             "🎯 주차별 재등록 현황", 
-            "📋 내 몸 변화설계서", 
+            "📋 3-STEP 바디 메핑 리포트", 
             "📝 수업일지 작성 & 전송", 
             "📉 인바디 체성분 관리", 
             "👥 회원 관리 & 세션 조절"
@@ -2183,7 +2188,7 @@ def main():
         page_booking(members, bookings)
     elif menu == "🎯 주차별 재등록 현황":
         page_re_registration(members, sales)
-    elif menu == "📋 내 몸 변화설계서":
+    elif menu == "📋 3-STEP 바디 메핑 리포트":
         page_bodyplan(members, reports)
     elif menu == "📝 수업일지 작성 & 전송":
         page_journal(members, logs)
