@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템 (RAW 데이터 정제 엔진 텍스트 오염 및 중복 완전 해결)
+PT Account — 김준수 트레이너 전용 1인 PT 회원 관리 & AI 내몸변화설계서 시스템
 ================================================================================
 """
 
@@ -245,7 +245,7 @@ def refine_journal_feedback(text, is_good=True):
         replacements = [
             (r"자극점.*찾음|자극점.*타겟|자극.*좋음|타겟.*좋음", "목표 주동근의 정확한 자극점을 인지하고 수축 자극을 효율적으로 전달하셨습니다."),
             (r"자세.*잘\s*잡힘|자세.*좋음|궤적.*좋음", "관절 정렬 및 동작 궤적이 매우 안정적으로 고립되어 완성도 높은 운동을 수행하셨습니다."),
-            (r"복압.*잘\s*잡음|코어.*좋음|중심.*잡힘", "횡격막 호흡을 통한 코어 복압을 견고하게 유지하여 하중을 효과적으로 분산하셨습니다."),
+            (r"복압.*잘\s*잡음|코어.*좋음|중심.*잡힘", "호흡 패턴을 통한 코어 복압을 견고하게 유지하여 하중을 효과적으로 분산하셨습니다."),
         ]
         for pattern, repl in replacements:
             if re.search(pattern, t):
@@ -263,21 +263,20 @@ def refine_journal_feedback(text, is_good=True):
         return f"다음 수업 시 '{t}' 요소를 디테일하게 케어하여 더욱 부상 없이 완벽한 자세 정렬을 만들어 드리겠습니다."
 
 
-# [핵심 교정] 항목별 분리 정제 엔진 (텍스트 교차 오염 및 중복 결합 오류 원천 차단)
+# [수정 완료] 환각 및 텍스트 강제 결합 방지 엔진 (입력된 RAW 데이터만 순수 정제)
 def refine_raw_text(text, category="general"):
-    if not text:
-        return "신체 밸런스 개선 및 안정적인 정렬 확보"
+    if not text or not str(text).strip():
+        return "미입력 (기본 평가 데이터 없음)"
     
     t = str(text).strip()
     
     if category == "goal":
         if re.search(r"다이어트|근력증가|체지방", t):
-            return "체지방 순감량 및 골격근량 증대를 통한 신체 밸런스 라인 형성"
+            return "체지방 감량 및 골격근량 증대를 통한 신체 밸런스 라인 형성"
         return t
 
     elif category == "journal":
-        if re.search(r"호흡|스쿼트", t):
-            return "횡격막 호흡 패턴 재설정 및 하체 하중 분산 스쿼트 정렬 지도"
+        # 입력된 텍스트에 기초한 전문 용어 정제만 수행 (미입력 내용 절대 추측 금지)
         return t
 
     elif category == "posture":
@@ -288,8 +287,8 @@ def refine_raw_text(text, category="general"):
         return t
 
     elif category == "func":
-        if re.search(r"벗윙크|스쿼트", t):
-            return "딥 스쿼트 시 굴곡 제한에 따른 벗윙크(Butt Wink) 보상 작용 및 고관절 가동성 제한"
+        if re.search(r"벗윙크", t):
+            return "딥 스쿼트 시 굴곡 제한에 따른 벗윙크(Butt Wink) 보상 작용 현상"
         elif re.search(r"유연|부상위험", t):
             return "관절 가동 범위(ROM)는 양호하나 과가동성(Hyper-mobility) 대비 고관절 고립력 보완 필요"
         return t
@@ -1359,7 +1358,7 @@ def page_re_registration(members, sales):
 
 
 # =========================================================
-# 7. 페이지: AI 내 몸 변화 설계서 (전문 가이드 placeholder 최적화)
+# 7. 페이지: AI 내 몸 변화 설계서 (순수 RAW 데이터 정제 기반)
 # =========================================================
 def page_bodyplan(members, reports):
     st.title("📋 PT 내 몸 변화 설계서 (AI 고도화 처방)")
@@ -1449,7 +1448,7 @@ def page_bodyplan(members, reports):
 
         components.html(preview_html, height=850, scrolling=True)
 
-    # [수정] 전문 해부학 예시 가이드 반영 입력 필드
+    # [수정] 전문 해부학 예시 가이드 및 순수 데이터 기반 정제 로직 적용
     if st.session_state.get("editing_member_id"):
         e_id = int(st.session_state.get("editing_member_id"))
         selected_m = members[pd.to_numeric(members["member_id"], errors="coerce") == e_id].iloc[0]
@@ -1473,17 +1472,17 @@ def page_bodyplan(members, reports):
         )
         raw_journal = st.text_input(
             "1. 1회차 수업 진행 내용 (운동일지 메모)", 
-            placeholder="예시: 횡격막 호흡 평가, 폼롤러 근막이완 및 고블릿 스쿼트 자세 정렬 지도",
+            placeholder="예시: 폼롤러 근막이완 및 고블릿 스쿼트 자세 정렬 지도",
             key=f"input_journal_{e_id}"
         )
         raw_posture = st.text_input(
             "2. 자세 체크 결과", 
-            placeholder="예시: 관상면(Frontal)상 좌측 골반 외측 경사 및 시상면(Sagittal)상 골반 전방 경사(Pelvic Anterior Tilt) 관찰",
+            placeholder="예시: 시상면(Sagittal)상 골반 전방 경사(Pelvic Anterior Tilt) 관찰",
             key=f"input_posture_{e_id}"
         )
         raw_func = st.text_input(
             "3. 움직임 체크 결과", 
-            placeholder="예시: 딥 스쿼트 수행 시 상체 과굴곡 패턴 관찰 및 OH 프레스 수행 시 흉추 신전 제한과 승모근 보상 개입",
+            placeholder="예시: 딥 스쿼트 수행 시 상체 과굴곡 패턴 및 고관절 가동성 제한",
             key=f"input_func_{e_id}"
         )
 
@@ -1493,15 +1492,26 @@ def page_bodyplan(members, reports):
             refined_posture = refine_raw_text(raw_posture, "posture")
             refined_func = refine_raw_text(raw_func, "func")
 
+            # 입력값이 있는 항목들로만 조합하여 텍스트 생성 (없는 내용 임의 추측 결합 원천 차단)
+            details_list = []
+            if raw_posture.strip():
+                details_list.append(f"자세 평가상 {refined_posture} 상태가 관찰되었습니다.")
+            if raw_func.strip():
+                details_list.append(f"움직임 기능 검사에서 {refined_func} 현상이 확인되었습니다.")
+            if raw_journal.strip():
+                details_list.append(f"이러한 보상 패턴을 개선하기 위해 진행된 1회차 훈련({refined_journal}) 성과를 바탕으로 로드맵을 적용합니다.")
+
+            analysis_body = " ".join(details_list) if details_list else "입력된 세부 평가 데이터를 기반으로 맞춤형 개선 플랜을 수립합니다."
+
             st.session_state[f"ta_analysis_{e_id}"] = f"""[신체 정밀 종합 분석]
 {selected_m['name']} 회원님의 정밀 신체 평가 결과, 핵심 개선 과제는 '{refined_goal}'입니다.
 
-자세 평가상 {refined_posture} 상태가 관찰되었으며, 움직임 기능 검사에서 {refined_func} 현상이 함께 확인되었습니다. 이러한 보상 패턴을 개선하기 위해 진행된 1회차 훈련({refined_journal}) 성과를 기반으로 관절 가동 범위를 확보하고 주동근 고립 자극을 극대화하는 3단계 로드맵을 적용합니다."""
+{analysis_body}"""
 
             st.session_state[f"ai_posture_text_{e_id}"] = f"체형 정렬 평가: {refined_posture}"
             st.session_state[f"ai_func_text_{e_id}"] = f"동작 가동성 평가: {refined_func}"
 
-            st.session_state[f"ta_p1_{e_id}"] = f"Phase 1 [1-4주차: 관절 이완 & 호흡 정렬 익히기]\n• 타이트해진 근막 이완 및 횡격막 호흡 정렬\n• 훈련 성과 반영: {refined_journal}"
+            st.session_state[f"ta_p1_{e_id}"] = f"Phase 1 [1-4주차: 관절 이완 & 호흡 정렬 익히기]\n• 타이트해진 근막 이완 및 호흡 정렬\n• 훈련 성과 반영: {refined_journal}"
             st.session_state[f"ta_p2_{e_id}"] = f"Phase 2 [5-8주차: 타겟 근육 고립 & 차근차근 부하 적용]\n• 보상 작용 없이 주동근 고립 자극 전달\n• 개선 과제 반영: {refined_posture} 케어"
             st.session_state[f"ta_p3_{e_id}"] = f"Phase 3 [9-12주차: 체력 극대화 & 자율 독립 루틴 완성]\n• 맞춤형 자율 운동 프로그램 체득 및 운동 자립 완성\n• 개선 과제 반영: {refined_func} 예방"
 
@@ -1512,7 +1522,7 @@ def page_bodyplan(members, reports):
 
 준비해 드린 12주 간의 Phase 플랜을 따라 차근차근 나아간다면, 불균형했던 관절 정렬이 제자리를 찾고 한층 새로워진 몸의 변화를 직접 경험하시게 될 것입니다. 저를 믿고 편안한 마음으로 따라와 주세요! 화이팅! 🔥"""
 
-            st.toast("RAW 데이터가 고도화 정제되어 각 항목별로 분할 기입되었습니다!")
+            st.toast("RAW 데이터가 순수하게 정제되어 각 항목별로 분할 기입되었습니다!")
             rerun()
 
         default_analysis = r_row.get("analysis_text") if has_existing else ""
