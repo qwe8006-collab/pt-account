@@ -425,7 +425,8 @@ def next_id(df, id_col):
     return int(pd.to_numeric(df[id_col], errors="coerce").fillna(0).max()) + 1
 
 
-def generate_friendly_message_from_data(member_name, exercises_df, good, improve):
+# [핵심 개편] 다음 수업 자동 탐색 및 잔여 세션 포함 카카오톡 메시지 생성기
+def generate_friendly_message_from_data(member_id, member_name, rem_sessions, exercises_df, good, improve):
     ex_summary = []
     if isinstance(exercises_df, pd.DataFrame) and not exercises_df.empty:
         for _, row in exercises_df.iterrows():
@@ -440,6 +441,26 @@ def generate_friendly_message_from_data(member_name, exercises_df, good, improve
     g_text = good if good else "오늘도 설정한 운동 목표 루틴을 깔끔하게 완수하셨습니다!"
     i_text = improve if improve else "다음 수업 때는 자세 정렬에 조금 더 신경 써볼게요."
 
+    # 🔍 예약 DB에서 '오늘 이후' 가장 가까운 다음 수업 탐색
+    next_class_text = ""
+    try:
+        bookings_df = st.session_state.get("bookings_df", fetch_table("bookings", BOOKINGS_COLUMNS))
+        today_str = get_kst_now().date().isoformat()
+        
+        user_future_bookings = bookings_df[
+            (bookings_df["member_id"].astype(str) == str(member_id)) &
+            (bookings_df["status"] != "취소") &
+            (bookings_df["date"] >= today_str)
+        ].sort_values(by=["date", "time_slot"])
+
+        if not user_future_bookings.empty:
+            next_b = user_future_bookings.iloc[0]
+            next_date_str = str(next_b["date"])
+            next_time_str = str(next_b["time_slot"])
+            next_class_text = f"\n🗓️ 다음 수업 일정: {next_date_str} ({next_time_str})"
+    except Exception:
+        next_class_text = ""
+
     return f"""안녕하세요 {member_name} 회원님! 오늘 PT 수업도 고생 많으셨습니다. 💪
 
 [오늘 진행한 운동 루틴]
@@ -448,6 +469,8 @@ def generate_friendly_message_from_data(member_name, exercises_df, good, improve
 [트레이너 피드백]
 ✔ 잘하신 점: {g_text}
 ✔ 보완할 점: {i_text}
+
+⏳ 남은 세션: {rem_sessions}회{next_class_text}
 
 오늘도 고생하셨습니다! 다음 수업 때도 화이팅입니다! 🔥
 - 담당 트레이너 {MY_NAME} 올림 -"""
@@ -876,7 +899,6 @@ def page_dashboard(members, logs, sales, reports, bookings):
                 m_gender = b_row.get("gender") or "남성"
                 rem_s = int(b_row.get("remaining_sessions", 0))
                 
-                # [추가 기능 2] 수업 시작 전 10초 체크용 부상/주의사항 태그 노출
                 m_memo = str(b_row.get("memo") or "").strip()
                 try:
                     s_dict = json.loads(b_row.get("survey_json") or "{}")
@@ -1587,11 +1609,12 @@ def page_journal(members, logs):
     st.session_state["current_journal_member_idx"] = idx
     member = members.iloc[idx]
     m_id = int(member["member_id"])
+    rem_sessions_val = int(member["remaining_sessions"])
 
     c1, c2, c3 = st.columns(3)
     c1.metric("총 세션", int(member["total_sessions"]))
-    c2.metric("잔여 세션", int(member["remaining_sessions"]))
-    c3.metric("진행 완료", int(member["total_sessions"]) - int(member["remaining_sessions"]))
+    c2.metric("잔여 세션", rem_sessions_val)
+    c3.metric("진행 완료", int(member["total_sessions"]) - rem_sessions_val)
 
     st.markdown("#### 오늘 수업 일정 및 운동 진행 내용")
 
@@ -1643,11 +1666,11 @@ def page_journal(members, logs):
     st.markdown("---")
     st.markdown(f"#### 📱 '{member['name']}' 회원 전송용 카카오톡 스마트 템플릿")
 
-    # [추가 기능 1] 카카오톡 전송 템플릿 선택기
     msg_type = st.radio("전송할 메시지 유형 선택", ["📝 수업일지 피드백", "⏰ 수업 예약 안내", "🚨 재등록 안내"], horizontal=True)
 
     if msg_type == "📝 수업일지 피드백":
-        live_msg = generate_friendly_message_from_data(member["name"], edited_df, good_points, improve_points)
+        # [수정] m_id 및 rem_sessions_val 추가하여 자동 탐색 로직 연결
+        live_msg = generate_friendly_message_from_data(m_id, member["name"], rem_sessions_val, edited_df, good_points, improve_points)
     elif msg_type == "⏰ 수업 예약 안내":
         live_msg = f"""안녕하세요 {member['name']} 회원님! {MY_NAME} 트레이너입니다. 😊
 
@@ -1660,10 +1683,9 @@ def page_journal(members, logs):
 수업 변경 필요시 최소 하루 전에 미리 말씀해 주세요! 
 내일도 건강한 모습으로 뵙겠습니다. 감사합니다! 🔥"""
     else: # 🚨 재등록 안내
-        rem_count = int(member["remaining_sessions"])
         live_msg = f"""안녕하세요 {member['name']} 회원님! {MY_NAME} 트레이너입니다. 💪
 
-회원님의 현재 남아있는 PT 세션은 [ {rem_count}회 ] 입니다.
+회원님의 현재 남아있는 PT 세션은 [ {rem_sessions_val}회 ] 입니다.
 원활한 수업 스케줄 고정 및 지속적인 운동 목표 달성을 위해 재등록 안내 도와드립니다.
 
 궁금하신 점이나 스케줄 상담은 편하게 말씀해 주세요! 
@@ -1672,7 +1694,7 @@ def page_journal(members, logs):
     st.code(live_msg, language=None)
 
     if st.button("✅ 일지 저장 (세션 -1 차감)", type="primary", use_container_width=True):
-        if int(member["remaining_sessions"]) <= 0:
+        if rem_sessions_val <= 0:
             st.error("잔여 세션이 없습니다.")
         else:
             valid_rows = edited_df[edited_df["종목"].astype(str).str.strip() != ""]
@@ -1687,7 +1709,7 @@ def page_journal(members, logs):
             logs = pd.concat([logs, pd.DataFrame([new_log])], ignore_index=True)
             
             if save_logs(logs):
-                members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "remaining_sessions"] = int(member["remaining_sessions"]) - 1
+                members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "remaining_sessions"] = rem_sessions_val - 1
                 save_members(members)
 
                 st.session_state["exercise_rows_df"] = pd.DataFrame([{"종목": "", "중량(kg)": 0.0, "횟수": 0, "세트": 0}])
@@ -1700,7 +1722,7 @@ def page_journal(members, logs):
 
 
 # =========================================================
-# 9. 페이지: 회원 관리 (입력 데이터 검증 보완)
+# 9. 페이지: 회원 관리
 # =========================================================
 def page_members(members, sales, bookings, logs, reports):
     st.title("👥 회원 관리 & 성비 분석")
@@ -1741,14 +1763,12 @@ def page_members(members, sales, bookings, logs, reports):
                 pay_type = c2.selectbox("결제 수단", ["카드", "계좌이체", "현금"])
 
                 if st.form_submit_button("등록 완료", type="primary", use_container_width=True):
-                    # [보완 4] 회원가입 입력 검증 로직
                     clean_contact = re.sub(r"[^0-9]", "", contact)
                     if not name.strip():
                         st.error("⚠️ 회원 이름을 입력해 주세요.")
                     elif len(clean_contact) < 10:
                         st.error("⚠️ 올바른 연락처 번호를 입력해 주세요.")
                     else:
-                        # 하이픈 정규화
                         if len(clean_contact) == 11: formatted_contact = f"{clean_contact[:3]}-{clean_contact[3:7]}-{clean_contact[7:]}"
                         else: formatted_contact = clean_contact
 
