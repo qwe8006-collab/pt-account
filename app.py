@@ -263,7 +263,6 @@ def refine_journal_feedback(text, is_good=True):
         return f"다음 수업 시 '{t}' 요소를 디테일하게 케어하여 더욱 부상 없이 완벽한 자세 정렬을 만들어 드리겠습니다."
 
 
-# [수정 완료] 환각 및 텍스트 강제 결합 방지 엔진 (입력된 RAW 데이터만 순수 정제)
 def refine_raw_text(text, category="general"):
     if not text or not str(text).strip():
         return "미입력 (기본 평가 데이터 없음)"
@@ -276,7 +275,6 @@ def refine_raw_text(text, category="general"):
         return t
 
     elif category == "journal":
-        # 입력된 텍스트에 기초한 전문 용어 정제만 수행 (미입력 내용 절대 추측 금지)
         return t
 
     elif category == "posture":
@@ -297,41 +295,30 @@ def refine_raw_text(text, category="general"):
 
 
 # =========================================================
-# 2. Supabase DB 데이터 관리 함수
+# 2. Supabase DB 세분화 캐싱 & 예외 처리 강화
 # =========================================================
-def load_data(table_name, columns):
+def fetch_table(table_name, columns):
+    """테이블 단위 독립 조회"""
     try:
-        response = supabase.table(table_name).select("*").execute()
-        df = pd.DataFrame(response.data)
+        res = supabase.table(table_name).select("*").execute()
+        df = pd.DataFrame(res.data)
         if df.empty:
             return pd.DataFrame(columns=columns)
         for col in columns:
             if col not in df.columns: df[col] = None
-            
-        str_cols = ["name", "contact", "memo", "survey_json", "goal", "tr_expect", "re_status", "week_group", "attendance", "status", "start_time", "end_time"]
-        for sc in str_cols:
-            if sc in df.columns:
-                df[sc] = df[sc].fillna("").astype(str)
-                
         return df[columns]
-    except Exception:
+    except Exception as e:
+        st.error(f"DB Fetch 에러 ({table_name}): {e}")
         return pd.DataFrame(columns=columns)
 
-def load_members(): return load_data("members", MEMBERS_COLUMNS)
-def load_logs(): return load_data("logs", LOGS_COLUMNS)
-def load_inbody(): return load_data("inbody", INBODY_COLUMNS)
-def load_sales(): return load_data("sales", SALES_COLUMNS)
-def load_reports(): return load_data("reports", REPORTS_COLUMNS)
-def load_bookings(): return load_data("bookings", BOOKINGS_COLUMNS)
-
-def get_cached_data(force_reload=False):
-    if force_reload or "members_df" not in st.session_state:
-        st.session_state["members_df"] = load_members()
-        st.session_state["logs_df"] = load_logs()
-        st.session_state["inbody_df"] = load_inbody()
-        st.session_state["sales_df"] = load_sales()
-        st.session_state["reports_df"] = load_reports()
-        st.session_state["bookings_df"] = load_bookings()
+def get_cached_data():
+    """세션 기반 테이블별 구별 로딩 (속도 최적화)"""
+    if "members_df" not in st.session_state: st.session_state["members_df"] = fetch_table("members", MEMBERS_COLUMNS)
+    if "logs_df" not in st.session_state: st.session_state["logs_df"] = fetch_table("logs", LOGS_COLUMNS)
+    if "inbody_df" not in st.session_state: st.session_state["inbody_df"] = fetch_table("inbody", INBODY_COLUMNS)
+    if "sales_df" not in st.session_state: st.session_state["sales_df"] = fetch_table("sales", SALES_COLUMNS)
+    if "reports_df" not in st.session_state: st.session_state["reports_df"] = fetch_table("reports", REPORTS_COLUMNS)
+    if "bookings_df" not in st.session_state: st.session_state["bookings_df"] = fetch_table("bookings", BOOKINGS_COLUMNS)
 
     return (
         st.session_state["members_df"],
@@ -342,8 +329,9 @@ def get_cached_data(force_reload=False):
         st.session_state["bookings_df"]
     )
 
-def save_data(table_name, df):
-    if df.empty: return
+def save_data_safe(table_name, df):
+    """DB 적용 검증 및 예외 처리 로직"""
+    if df.empty: return True
     data = df.to_dict(orient="records")
     int_fields = ["member_id", "log_id", "record_id", "sale_id", "report_id", "booking_id", "total_sessions", "remaining_sessions", "session_price", "age", "exp_re_sessions", "exp_re_price", "is_exp_configured", "amount"]
     float_fields = ["weight", "skeletal_muscle", "body_fat_pct"]
@@ -353,51 +341,48 @@ def save_data(table_name, df):
     for row in data:
         clean_row = {}
         for k, v in row.items():
-            if pd.isna(v) or v is None:
-                clean_row[k] = None
-            elif k in int_fields:
-                clean_row[k] = int(float(v))
-            elif k in float_fields:
-                clean_row[k] = float(v)
-            elif k in bool_fields:
-                clean_row[k] = bool(v)
-            else:
-                clean_row[k] = str(v)
+            if pd.isna(v) or v is None: clean_row[k] = None
+            elif k in int_fields: clean_row[k] = int(float(v))
+            elif k in float_fields: clean_row[k] = float(v)
+            elif k in bool_fields: clean_row[k] = bool(v)
+            else: clean_row[k] = str(v)
         clean_batch.append(clean_row)
 
     try:
         supabase.table(table_name).upsert(clean_batch).execute()
+        return True
     except Exception as e:
-        st.error(f"DB 저장 오류 ({table_name}): {e}")
+        st.error(f"🚨 DB 저장 중 오류가 발생했습니다 ({table_name}): {e}")
+        return False
 
 def save_members(df): 
     st.session_state["members_df"] = df
-    save_data("members", df)
+    return save_data_safe("members", df)
 
 def save_logs(df): 
     st.session_state["logs_df"] = df
-    save_data("logs", df)
+    return save_data_safe("logs", df)
 
 def save_inbody(df): 
     st.session_state["inbody_df"] = df
-    save_data("inbody", df)
+    return save_data_safe("inbody", df)
 
 def save_sales(df): 
     st.session_state["sales_df"] = df
-    save_data("sales", df)
+    return save_data_safe("sales", df)
 
 def save_reports(df): 
     st.session_state["reports_df"] = df
-    save_data("reports", df)
+    return save_data_safe("reports", df)
 
 def save_bookings(df): 
     st.session_state["bookings_df"] = df
-    save_data("bookings", df)
+    return save_data_safe("bookings", df)
 
 def update_attendance_log_and_session(member_id, date_str, start_time_str, end_time_str, new_att_val):
     try:
-        logs_df = st.session_state.get("logs_df", load_logs())
-        members_df = st.session_state.get("members_df", load_members())
+        logs_df = st.session_state.get("logs_df", fetch_table("logs", LOGS_COLUMNS))
+        members_df = st.session_state.get("members_df", fetch_table("members", MEMBERS_COLUMNS))
         
         mask = (logs_df["member_id"].astype(str) == str(member_id)) & (logs_df["date"] == date_str) & (logs_df["start_time"] == start_time_str)
         prev_att_val = "미체크"
@@ -433,8 +418,7 @@ def update_attendance_log_and_session(member_id, date_str, start_time_str, end_t
     except Exception as e:
         st.error(f"출결 동기화 및 세션 차감 오류: {e}")
 
-def init_all_files():
-    pass
+def init_all_files(): pass
 
 def next_id(df, id_col):
     if df.empty: return 1
@@ -505,21 +489,12 @@ def build_4step_report_html(member, report):
 <meta charset="UTF-8"/>
 <title>{member.get('name','')} 회원의 내 몸 변화 설계서</title>
 <style>
-  @page {{ 
-    size: A4 portrait; 
-    margin: 0; 
-  }}
-  *, *:before, *:after {{
-    box-sizing: border-box;
-  }}
+  @page {{ size: A4 portrait; margin: 0; }}
+  *, *:before, *:after {{ box-sizing: border-box; }}
   html, body {{ 
-    width: 210mm;
-    margin: 0; padding: 0;
-    background-color: #FFFFFF; 
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-    color: #0F172A; 
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    width: 210mm; margin: 0; padding: 0;
+    background-color: #FFFFFF; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+    color: #0F172A; -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }}
 
   .no-print-bar {{
@@ -543,10 +518,7 @@ def build_4step_report_html(member, report):
   .cover-badge {{ background: {COLOR_BLUE}; display: inline-block; padding: 8px 20px; border-radius: 30px; font-size: 18px; font-weight: 800; margin-top: 20px; }}
   .cover-meta {{ border-top: 2px solid rgba(255,255,255,0.2); padding-top: 20px; font-size: 15px; line-height: 1.8; }}
 
-  .sheet {{
-    width: 210mm; min-height: 297mm; padding: 15mm 20mm; margin: 0 auto;
-    background: #FFFFFF;
-  }}
+  .sheet {{ width: 210mm; min-height: 297mm; padding: 15mm 20mm; margin: 0 auto; background: #FFFFFF; }}
   .header {{ border-bottom: 3px solid {COLOR_BLUE}; padding-bottom: 12px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; }}
   .sec-title {{ font-size: 17px; font-weight: 800; color: {COLOR_NAVY}; border-left: 5px solid {COLOR_BLUE}; padding-left: 10px; margin: 18px 0 10px; }}
   .content-card {{ background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 16px; font-size: 13.5px; line-height: 1.6; color: #334155; margin-bottom: 12px; }}
@@ -884,7 +856,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
     if day_bookings.empty:
         st.info(f"{sel_date_str}에 예정된 수업 예약이 없습니다.")
     else:
-        merged_day_b = day_bookings.merge(members[["member_id", "name", "gender", "total_sessions", "remaining_sessions"]], on="member_id", how="inner")
+        merged_day_b = day_bookings.merge(members[["member_id", "name", "gender", "total_sessions", "remaining_sessions", "memo", "survey_json"]], on="member_id", how="inner")
         
         if merged_day_b.empty:
             st.info(f"{sel_date_str}에 예정된 수업 예약이 없습니다.")
@@ -903,6 +875,20 @@ def page_dashboard(members, logs, sales, reports, bookings):
                 m_name = b_row.get("name") or "회원"
                 m_gender = b_row.get("gender") or "남성"
                 rem_s = int(b_row.get("remaining_sessions", 0))
+                
+                # [추가 기능 2] 수업 시작 전 10초 체크용 부상/주의사항 태그 노출
+                m_memo = str(b_row.get("memo") or "").strip()
+                try:
+                    s_dict = json.loads(b_row.get("survey_json") or "{}")
+                    s_pain = s_dict.get("pain", "").strip()
+                except Exception:
+                    s_pain = ""
+                
+                caution_text = ""
+                if s_pain: caution_text = f"🩺 통증: {s_pain}"
+                elif m_memo: caution_text = f"💬 메모: {m_memo[:15]}..."
+
+                caution_html = f'<span style="background:#FEF2F2; color:#DC2626; padding:2px 8px; border-radius:10px; font-size:12px; font-weight:800; border:1px solid #FECDD3; margin-left:6px;">{caution_text}</span>' if caution_text else ""
                 
                 m_log = logs[
                     (logs["date"].astype(str) == sel_date_str) & 
@@ -924,7 +910,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
                 <div style="background:#F8FAFC; border-left:4px solid {COLOR_BLUE}; border-radius:10px; padding:14px 20px; margin-bottom:8px;">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <div>
-                            <span style="font-size:17px; font-weight:800; color:{COLOR_NAVY};">👤 {m_name} 회원님</span> {g_badge} {rem_badge} {att_badge}
+                            <span style="font-size:17px; font-weight:800; color:{COLOR_NAVY};">👤 {m_name} 회원님</span> {g_badge} {rem_badge} {att_badge} {caution_html}
                         </div>
                         <div style="font-weight:800; font-size:15px; color:{COLOR_BLUE};">
                             ⏰ {s_time} ~ {e_time}
@@ -1358,7 +1344,7 @@ def page_re_registration(members, sales):
 
 
 # =========================================================
-# 7. 페이지: AI 내 몸 변화 설계서 (순수 RAW 데이터 정제 기반)
+# 7. 페이지: AI 내 몸 변화 설계서
 # =========================================================
 def page_bodyplan(members, reports):
     st.title("📋 PT 내 몸 변화 설계서 (AI 고도화 처방)")
@@ -1448,7 +1434,6 @@ def page_bodyplan(members, reports):
 
         components.html(preview_html, height=850, scrolling=True)
 
-    # [수정] 전문 해부학 예시 가이드 및 순수 데이터 기반 정제 로직 적용
     if st.session_state.get("editing_member_id"):
         e_id = int(st.session_state.get("editing_member_id"))
         selected_m = members[pd.to_numeric(members["member_id"], errors="coerce") == e_id].iloc[0]
@@ -1492,14 +1477,10 @@ def page_bodyplan(members, reports):
             refined_posture = refine_raw_text(raw_posture, "posture")
             refined_func = refine_raw_text(raw_func, "func")
 
-            # 입력값이 있는 항목들로만 조합하여 텍스트 생성 (없는 내용 임의 추측 결합 원천 차단)
             details_list = []
-            if raw_posture.strip():
-                details_list.append(f"자세 평가상 {refined_posture} 상태가 관찰되었습니다.")
-            if raw_func.strip():
-                details_list.append(f"움직임 기능 검사에서 {refined_func} 현상이 확인되었습니다.")
-            if raw_journal.strip():
-                details_list.append(f"이러한 보상 패턴을 개선하기 위해 진행된 1회차 훈련({refined_journal}) 성과를 바탕으로 로드맵을 적용합니다.")
+            if raw_posture.strip(): details_list.append(f"자세 평가상 {refined_posture} 상태가 관찰되었습니다.")
+            if raw_func.strip(): details_list.append(f"움직임 기능 검사에서 {refined_func} 현상이 확인되었습니다.")
+            if raw_journal.strip(): details_list.append(f"이러한 보상 패턴을 개선하기 위해 진행된 1회차 훈련({refined_journal}) 성과를 바탕으로 로드맵을 적용합니다.")
 
             analysis_body = " ".join(details_list) if details_list else "입력된 세부 평가 데이터를 기반으로 맞춤형 개선 플랜을 수립합니다."
 
@@ -1571,12 +1552,12 @@ def page_bodyplan(members, reports):
                 }
                 reports = pd.concat([reports, pd.DataFrame([new_rep])], ignore_index=True)
 
-            save_reports(reports)
-            st.session_state["report_saved_toast"] = True
-            st.session_state["selected_member_id"] = e_id
-            st.session_state["show_modal"] = True
-            st.session_state["editing_member_id"] = None
-            rerun()
+            if save_reports(reports):
+                st.session_state["report_saved_toast"] = True
+                st.session_state["selected_member_id"] = e_id
+                st.session_state["show_modal"] = True
+                st.session_state["editing_member_id"] = None
+                rerun()
 
         if col_cancel.button("취소", use_container_width=True, key=f"btn_cancel_rep_{e_id}"):
             st.session_state["editing_member_id"] = None
@@ -1590,7 +1571,7 @@ def page_bodyplan(members, reports):
 
 
 # =========================================================
-# 8. 페이지: 수업일지 작성
+# 8. 페이지: 수업일지 작성 & 카톡 스마트 템플릿 생성
 # =========================================================
 def page_journal(members, logs):
     st.title("📝 수업일지 작성 & 카톡 전송")
@@ -1660,8 +1641,34 @@ def page_journal(members, logs):
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("---")
-    st.markdown(f"#### 📱 '{member['name']}' 회원 전송용 실시간 카카오톡 메시지")
-    live_msg = generate_friendly_message_from_data(member["name"], edited_df, good_points, improve_points)
+    st.markdown(f"#### 📱 '{member['name']}' 회원 전송용 카카오톡 스마트 템플릿")
+
+    # [추가 기능 1] 카카오톡 전송 템플릿 선택기
+    msg_type = st.radio("전송할 메시지 유형 선택", ["📝 수업일지 피드백", "⏰ 수업 예약 안내", "🚨 재등록 안내"], horizontal=True)
+
+    if msg_type == "📝 수업일지 피드백":
+        live_msg = generate_friendly_message_from_data(member["name"], edited_df, good_points, improve_points)
+    elif msg_type == "⏰ 수업 예약 안내":
+        live_msg = f"""안녕하세요 {member['name']} 회원님! {MY_NAME} 트레이너입니다. 😊
+
+다음 PT 수업 안내해 드립니다.
+
+🗓️ 수업 날짜: {log_date.strftime('%Y년 %m월 %d일')}
+⏰ 수업 시간: {start_time_sel} ~ {auto_end_time}
+📍 장소: 센터 웨이트 존
+
+수업 변경 필요시 최소 하루 전에 미리 말씀해 주세요! 
+내일도 건강한 모습으로 뵙겠습니다. 감사합니다! 🔥"""
+    else: # 🚨 재등록 안내
+        rem_count = int(member["remaining_sessions"])
+        live_msg = f"""안녕하세요 {member['name']} 회원님! {MY_NAME} 트레이너입니다. 💪
+
+회원님의 현재 남아있는 PT 세션은 [ {rem_count}회 ] 입니다.
+원활한 수업 스케줄 고정 및 지속적인 운동 목표 달성을 위해 재등록 안내 도와드립니다.
+
+궁금하신 점이나 스케줄 상담은 편하게 말씀해 주세요! 
+늘 열심히 임해주셔서 감사합니다! 🙏"""
+
     st.code(live_msg, language=None)
 
     if st.button("✅ 일지 저장 (세션 -1 차감)", type="primary", use_container_width=True):
@@ -1678,14 +1685,14 @@ def page_journal(members, logs):
                 "sent": False, "attendance": "출석"
             }
             logs = pd.concat([logs, pd.DataFrame([new_log])], ignore_index=True)
-            save_logs(logs)
+            
+            if save_logs(logs):
+                members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "remaining_sessions"] = int(member["remaining_sessions"]) - 1
+                save_members(members)
 
-            members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "remaining_sessions"] = int(member["remaining_sessions"]) - 1
-            save_members(members)
-
-            st.session_state["exercise_rows_df"] = pd.DataFrame([{"종목": "", "중량(kg)": 0.0, "횟수": 0, "세트": 0}])
-            st.session_state["log_saved_success"] = True
-            rerun()
+                st.session_state["exercise_rows_df"] = pd.DataFrame([{"종목": "", "중량(kg)": 0.0, "횟수": 0, "세트": 0}])
+                st.session_state["log_saved_success"] = True
+                rerun()
 
     if st.session_state.get("log_saved_success", False):
         st.toast(f"🎉 '{member['name']}' 회원의 일지가 정상 등록되었습니다!", icon="✅")
@@ -1693,7 +1700,7 @@ def page_journal(members, logs):
 
 
 # =========================================================
-# 9. 페이지: 회원 관리
+# 9. 페이지: 회원 관리 (입력 데이터 검증 보완)
 # =========================================================
 def page_members(members, sales, bookings, logs, reports):
     st.title("👥 회원 관리 & 성비 분석")
@@ -1726,21 +1733,31 @@ def page_members(members, sales, bookings, logs, reports):
             with st.form("reg_form", clear_on_submit=True):
                 c1, c2 = st.columns(2)
                 name = c1.text_input("회원 이름 *")
-                contact = c1.text_input("연락처 *")
+                contact = c1.text_input("연락처 * (숫자만 입력 가능)")
                 gender = c1.selectbox("성별 *", ["남성", "여성"])
 
-                sessions = c2.number_input("등록 세션 수", min_value=1, value=10)
-                amount = c2.number_input("결제 금액(원)", min_value=0, value=700000)
+                sessions = c2.number_input("등록 세션 수 *", min_value=1, value=10)
+                amount = c2.number_input("결제 금액(원) *", min_value=0, value=700000, step=10000)
                 pay_type = c2.selectbox("결제 수단", ["카드", "계좌이체", "현금"])
 
                 if st.form_submit_button("등록 완료", type="primary", use_container_width=True):
-                    if name and contact:
+                    # [보완 4] 회원가입 입력 검증 로직
+                    clean_contact = re.sub(r"[^0-9]", "", contact)
+                    if not name.strip():
+                        st.error("⚠️ 회원 이름을 입력해 주세요.")
+                    elif len(clean_contact) < 10:
+                        st.error("⚠️ 올바른 연락처 번호를 입력해 주세요.")
+                    else:
+                        # 하이픈 정규화
+                        if len(clean_contact) == 11: formatted_contact = f"{clean_contact[:3]}-{clean_contact[3:7]}-{clean_contact[7:]}"
+                        else: formatted_contact = clean_contact
+
                         new_m_id = next_id(members, "member_id")
                         today_obj = get_kst_now().date()
                         auto_week = get_week_of_month(today_obj)
 
                         new_m = {
-                            "member_id": new_m_id, "name": name, "contact": contact,
+                            "member_id": new_m_id, "name": name.strip(), "contact": formatted_contact,
                             "birth_date": "1995-01-01", "reg_date": today_obj.isoformat(),
                             "total_sessions": int(sessions), "remaining_sessions": int(sessions),
                             "trainer": MY_NAME, "status": "Active", "goal": "다이어트 및 체형교정",
@@ -1750,25 +1767,25 @@ def page_members(members, sales, bookings, logs, reports):
                             "memo": "", "survey_json": "{}", "exp_re_sessions": 10, "exp_re_price": int(amount/sessions) if sessions>0 else 70000, "is_exp_configured": 0
                         }
                         members = pd.concat([members, pd.DataFrame([new_m])], ignore_index=True)
-                        save_members(members)
+                        
+                        if save_members(members):
+                            db_sales = fetch_table("sales", SALES_COLUMNS)
+                            new_s_id = next_id(db_sales, "sale_id")
 
-                        db_sales = load_sales()
-                        new_s_id = next_id(db_sales, "sale_id")
+                            new_s = {
+                                "sale_id": new_s_id, 
+                                "member_id": new_m_id, 
+                                "date": today_obj.isoformat(), 
+                                "product_name": f"PT {sessions}회 신규등록", 
+                                "amount": amount, 
+                                "pay_type": pay_type
+                            }
+                            updated_sales = pd.concat([db_sales, pd.DataFrame([new_s])], ignore_index=True)
+                            save_sales(updated_sales)
 
-                        new_s = {
-                            "sale_id": new_s_id, 
-                            "member_id": new_m_id, 
-                            "date": today_obj.isoformat(), 
-                            "product_name": f"PT {sessions}회 신규등록", 
-                            "amount": amount, 
-                            "pay_type": pay_type
-                        }
-                        updated_sales = pd.concat([db_sales, pd.DataFrame([new_s])], ignore_index=True)
-                        save_sales(updated_sales)
-
-                        st.session_state["show_reg_modal"] = False
-                        st.toast(f"'{name}' ({gender}) 회원이 정상 등록되고 결제 매출({amount:,.0f}원)이 계상되었습니다.")
-                        rerun()
+                            st.session_state["show_reg_modal"] = False
+                            st.toast(f"'{name}' ({gender}) 회원이 정상 등록되고 결제 매출({amount:,.0f}원)이 계상되었습니다.")
+                            rerun()
 
     tab1, tab2 = st.tabs(["📋 회원 세션 관리 & 메모/사전설문", "💰 월별 매출 통합 분석"])
 
@@ -1879,23 +1896,23 @@ def page_members(members, sales, bookings, logs, reports):
                     members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "remaining_sessions"] = rem + re_sess
                     members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "session_price"] = re_unit_price
                     members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "re_status"] = "결제완료"
-                    save_members(members)
+                    
+                    if save_members(members):
+                        db_sales = fetch_table("sales", SALES_COLUMNS)
+                        new_s = {
+                            "sale_id": next_id(db_sales, "sale_id"),
+                            "member_id": m_id,
+                            "date": get_kst_now().strftime("%Y-%m-%d"),
+                            "product_name": f"PT {re_sess}회 재등록",
+                            "amount": tot_re_amount,
+                            "pay_type": re_pay_type
+                        }
+                        updated_sales = pd.concat([db_sales, pd.DataFrame([new_s])], ignore_index=True)
+                        save_sales(updated_sales)
 
-                    db_sales = load_sales()
-                    new_s = {
-                        "sale_id": next_id(db_sales, "sale_id"),
-                        "member_id": m_id,
-                        "date": get_kst_now().strftime("%Y-%m-%d"),
-                        "product_name": f"PT {re_sess}회 재등록",
-                        "amount": tot_re_amount,
-                        "pay_type": re_pay_type
-                    }
-                    updated_sales = pd.concat([db_sales, pd.DataFrame([new_s])], ignore_index=True)
-                    save_sales(updated_sales)
-
-                    st.session_state["re_pay_open_id"] = None
-                    st.toast(f"🎉 '{m['name']}' 회원 {re_sess}회 재등록 ({tot_re_amount:,.0f}원) 결제 집계가 완료되었습니다!")
-                    rerun()
+                        st.session_state["re_pay_open_id"] = None
+                        st.toast(f"🎉 '{m['name']}' 회원 {re_sess}회 재등록 ({tot_re_amount:,.0f}원) 결제 집계가 완료되었습니다!")
+                        rerun()
 
             if has_memo and memo_open_id != m_id:
                 st.caption(f"💬 특이사항 메모: {m['memo']}")
@@ -1933,10 +1950,11 @@ def page_members(members, sales, bookings, logs, reports):
                     
                     members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "memo"] = str(memo_val)
                     members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "survey_json"] = str(new_survey_json)
-                    save_members(members)
-                    st.session_state["memo_open_id"] = None
-                    st.toast(f"'{m['name']}' 회원의 메모 및 사전 설문지가 저장되었습니다.")
-                    rerun()
+                    
+                    if save_members(members):
+                        st.session_state["memo_open_id"] = None
+                        st.toast(f"'{m['name']}' 회원의 메모 및 사전 설문지가 저장되었습니다.")
+                        rerun()
 
                 if mc2.button("닫기", key=f"memo_close_{m_id}", use_container_width=True):
                     st.session_state["memo_open_id"] = None
@@ -2039,9 +2057,9 @@ def page_inbody(members, inbody):
             "body_fat_pct": in_fat
         }
         inbody = pd.concat([inbody, pd.DataFrame([new_rec])], ignore_index=True)
-        save_inbody(inbody)
-        st.toast(f"'{selected_m['name']}' 회원의 체성분 기록이 추가되었습니다.")
-        rerun()
+        if save_inbody(inbody):
+            st.toast(f"'{selected_m['name']}' 회원의 체성분 기록이 추가되었습니다.")
+            rerun()
 
     st.markdown('</div>', unsafe_allow_html=True)
 
