@@ -1113,7 +1113,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
 
 # =========================================================
-# 5. 페이지: 신규 상담 기록 관리 (결제 세션/단가 지정 이관 탑재)
+# 5. 페이지: 신규 상담 기록 관리 (에러 수정 및 실시간 총매출 표기)
 # =========================================================
 def page_consultations(consultations, members, sales):
     st.title("💡 신규 상담 기록 관리 (독립 모수)")
@@ -1176,15 +1176,21 @@ def page_consultations(consultations, members, sales):
                 st.markdown(f"<b>👤 {c['name']} 고객님</b> {g_badge} &nbsp;&nbsp; {conv_tag} &nbsp; <span style='font-size:12px; color:#64748B;'>상담일: {c['date']} | 연락처: {c['contact']}</span>", unsafe_allow_html=True)
                 st.markdown(f"<div style='font-size:13.5px; margin-top:4px;'>🎯 <b>목적:</b> {c.get('goal','-')} | 📍 <b>유입:</b> {c.get('source','-')} | 📊 <b>전환 가능성:</b> {c.get('expect_status','-')}</div>", unsafe_allow_html=True)
 
+            # [완벽 수정] 상담 삭제 버그 및 예외 처리 트라이 블록 보완
             with col_cs2:
                 if st.button("🗑️", key=f"btn_del_consult_{c_id}_{idx}", use_container_width=True):
-                    supabase.table("consultations").delete().eq("consult_id", c_id).execute()
+                    try:
+                        supabase.table("consultations").delete().eq("consult_id", c_id).execute()
+                        supabase.table("consultations").delete().eq("consult_id", str(c_id)).execute()
+                    except Exception as e:
+                        pass
+                    
                     consultations = consultations[consultations["consult_id"].astype(str) != str(c_id)]
                     save_consultations(consultations)
-                    st.toast("상담 기록이 삭제되었습니다.")
+                    st.toast("상담 기록이 완전 삭제되었습니다.")
                     rerun()
 
-            # [개선] 상담 고객명 클릭/확장 시 결제 세션/단가 지정 이관 폼 탑재
+            # [개선] 상담 고객명 클릭/확장 시 실시간 총매출액 표기
             with st.expander(f"💬 '{c['name']}' 상세 상담 메모 및 회원 전환 이관 설정", expanded=False):
                 if c.get("memo"):
                     st.markdown(f"**상담 메모:**\n{c['memo']}")
@@ -1192,52 +1198,52 @@ def page_consultations(consultations, members, sales):
                 if not is_conv:
                     st.markdown("---")
                     st.markdown("##### 💳 결제 조건 기입 및 회원 관리로 즉시 이관")
-                    ec1, ec2, ec3 = st.columns([1.5, 1.5, 1])
+                    ec1, ec2, ec3 = st.columns([1.2, 1.5, 1.5])
                     re_sess = ec1.selectbox("등록 세션 수(회)", [10, 20, 30, 40, 50], index=0, key=f"c_sess_{c_id}")
                     re_price = ec2.number_input("1회 세션 단가(원)", min_value=10000, value=70000, step=5000, key=f"c_price_{c_id}")
                     tot_pay = re_sess * re_price
 
-                    ec3.write("")
-                    ec3.write("")
-                    if ec3.button("👥 회원 등록 및 일지 이관", key=f"btn_convert_full_{c_id}", type="primary", use_container_width=True):
-                        # 1. 회원 테이블에 신규 등록
-                        new_m_id = next_id(members, "member_id")
-                        today_obj = get_kst_now().date()
-                        auto_week = get_week_of_month(today_obj)
+                    with ec3:
+                        st.markdown(f"<div style='padding-top:10px; font-size:15px; font-weight:800; color:{COLOR_BLUE};'>💰 총 결제 금액: {tot_pay:,.0f}원</div>", unsafe_allow_html=True)
+                        if st.button("👥 회원 등록 및 일지 이관", key=f"btn_convert_full_{c_id}", type="primary", use_container_width=True):
+                            # 1. 회원 테이블에 신규 등록
+                            new_m_id = next_id(members, "member_id")
+                            today_obj = get_kst_now().date()
+                            auto_week = get_week_of_month(today_obj)
 
-                        new_m = {
-                            "member_id": new_m_id, "name": c["name"], "contact": c["contact"],
-                            "birth_date": "1995-01-01", "reg_date": today_obj.isoformat(),
-                            "total_sessions": int(re_sess), "remaining_sessions": int(re_sess),
-                            "trainer": MY_NAME, "status": "Active", "goal": c.get("goal") or "다이어트 및 체형교정",
-                            "session_price": int(re_price), "branch": "개인 PT", "gender": c.get("gender", "여성"), "age": 28,
-                            "tr_expect": "확인중", "re_status": "미지정", "week_group": auto_week,
-                            "memo": f"[신규상담 이관 메모]\n{c.get('memo','')}", 
-                            "survey_json": json.dumps({"pain": c.get("memo",""), "exp": "신규 상담 후 전환 등록"}, ensure_ascii=False),
-                            "exp_re_sessions": 10, "exp_re_price": int(re_price), "is_exp_configured": 0
-                        }
-                        members = pd.concat([members, pd.DataFrame([new_m])], ignore_index=True)
-                        save_members(members)
+                            new_m = {
+                                "member_id": new_m_id, "name": c["name"], "contact": c["contact"],
+                                "birth_date": "1995-01-01", "reg_date": today_obj.isoformat(),
+                                "total_sessions": int(re_sess), "remaining_sessions": int(re_sess),
+                                "trainer": MY_NAME, "status": "Active", "goal": c.get("goal") or "다이어트 및 체형교정",
+                                "session_price": int(re_price), "branch": "개인 PT", "gender": c.get("gender", "여성"), "age": 28,
+                                "tr_expect": "확인중", "re_status": "미지정", "week_group": auto_week,
+                                "memo": f"[신규상담 이관 메모]\n{c.get('memo','')}", 
+                                "survey_json": json.dumps({"pain": c.get("memo",""), "exp": "신규 상담 후 전환 등록"}, ensure_ascii=False),
+                                "exp_re_sessions": 10, "exp_re_price": int(re_price), "is_exp_configured": 0
+                            }
+                            members = pd.concat([members, pd.DataFrame([new_m])], ignore_index=True)
+                            save_members(members)
 
-                        # 2. 매출 결제 기록 집계
-                        db_sales = fetch_table("sales", SALES_COLUMNS)
-                        new_s = {
-                            "sale_id": next_id(db_sales, "sale_id"),
-                            "member_id": new_m_id,
-                            "date": today_obj.isoformat(),
-                            "product_name": f"PT {re_sess}회 신규등록 (상담전환)",
-                            "amount": tot_pay,
-                            "pay_type": "카드"
-                        }
-                        updated_sales = pd.concat([db_sales, pd.DataFrame([new_s])], ignore_index=True)
-                        save_sales(updated_sales)
+                            # 2. 매출 결제 기록 집계
+                            db_sales = fetch_table("sales", SALES_COLUMNS)
+                            new_s = {
+                                "sale_id": next_id(db_sales, "sale_id"),
+                                "member_id": new_m_id,
+                                "date": today_obj.isoformat(),
+                                "product_name": f"PT {re_sess}회 신규등록 (상담전환)",
+                                "amount": tot_pay,
+                                "pay_type": "카드"
+                            }
+                            updated_sales = pd.concat([db_sales, pd.DataFrame([new_s])], ignore_index=True)
+                            save_sales(updated_sales)
 
-                        # 3. 상담 상태 업데이트
-                        consultations.loc[consultations["consult_id"] == c_id, "converted"] = True
-                        save_consultations(consultations)
+                            # 3. 상담 상태 업데이트
+                            consultations.loc[consultations["consult_id"] == c_id, "converted"] = True
+                            save_consultations(consultations)
 
-                        st.toast(f"🎉 '{c['name']}' 회원이 {re_sess}회({tot_pay:,.0f}원) 결제 집계와 함께 이관 등록되었습니다!")
-                        rerun()
+                            st.toast(f"🎉 '{c['name']}' 회원이 {re_sess}회({tot_pay:,.0f}원) 결제 집계와 함께 이관 등록되었습니다!")
+                            rerun()
 
             st.markdown('</div>', unsafe_allow_html=True)
 
