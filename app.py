@@ -139,7 +139,7 @@ def rerun():
 
 
 # =========================================================
-# 1. 컬럼 정의 & 템플릿
+# 1. 컬럼 정의 & 템플릿 (대표 운동 확장)
 # =========================================================
 MEMBERS_COLUMNS = [
     "member_id", "name", "contact", "birth_date", "reg_date",
@@ -164,31 +164,42 @@ RE_STATUS_OPTIONS = ["결제완료", "결제예정", "이월", "이탈", "전월
 TIME_SLOTS = [f"{h:02d}:00" for h in range(6, 23)]
 WEEKDAY_LABELS_KR = ["일", "월", "화", "수", "목", "금", "토"]
 
+# [확장] 부위별 필수 대표 운동 5종씩 풍성하게 배치
 PRESET_ROUTINES_DF = {
     "가슴": pd.DataFrame([
-        {"종목": "벤치프레스", "중량(kg)": 40.0, "횟수": 10, "세트": 4},
+        {"종목": "바벨 벤치프레스", "중량(kg)": 40.0, "횟수": 10, "세트": 4},
         {"종목": "인클라인 덤벨프레스", "중량(kg)": 12.0, "횟수": 12, "세트": 3},
+        {"종목": "딥스 (체중/보조)", "중량(kg)": 0.0, "횟수": 10, "세트": 3},
+        {"종목": "체스트 프레스 머신", "중량(kg)": 30.0, "횟수": 12, "세트": 3},
         {"종목": "케이블 크로스오버", "중량(kg)": 10.0, "횟수": 15, "세트": 3},
     ]),
     "등": pd.DataFrame([
         {"종목": "랫풀다운", "중량(kg)": 35.0, "횟수": 12, "세트": 4},
-        {"종목": "시티드 로우", "중량(kg)": 35.0, "횟수": 12, "세트": 3},
+        {"종목": "시티드 케이블 로우", "중량(kg)": 35.0, "횟수": 12, "세트": 3},
+        {"종목": "바벨 벤트오버 로우", "중량(kg)": 30.0, "횟수": 10, "세트": 3},
+        {"종목": "원암 덤벨 로우", "중량(kg)": 14.0, "횟수": 12, "세트": 3},
         {"종목": "루마니안 데드리프트", "중량(kg)": 50.0, "횟수": 8, "세트": 3},
     ]),
     "어깨": pd.DataFrame([
-        {"종목": "오버헤드 숄더프레스", "중량(kg)": 15.0, "횟수": 10, "세트": 4},
+        {"종목": "오버헤드 바벨 숄더프레스", "중량(kg)": 20.0, "횟수": 10, "세트": 4},
+        {"종목": "덤벨 숄더프레스", "중량(kg)": 10.0, "횟수": 12, "세트": 3},
         {"종목": "사이드 레터럴 레이즈", "중량(kg)": 5.0, "횟수": 15, "세트": 4},
-        {"종목": "페이스풀", "중량(kg)": 15.0, "횟수": 15, "세트": 3},
+        {"종목": "벤트오버 레터럴 레이즈", "중량(kg)": 4.0, "횟수": 15, "세트": 3},
+        {"종목": "페이스풀 (케이블)", "중량(kg)": 15.0, "횟수": 15, "세트": 3},
     ]),
     "하체": pd.DataFrame([
         {"종목": "바벨 스쿼트", "중량(kg)": 40.0, "횟수": 10, "세트": 4},
         {"종목": "레그 프레스", "중량(kg)": 80.0, "횟수": 12, "세트": 3},
+        {"종목": "덤벨 런지", "중량(kg)": 8.0, "횟수": 10, "세트": 3},
         {"종목": "레그 익스텐션", "중량(kg)": 25.0, "횟수": 15, "세트": 3},
+        {"종목": "라잉 레그 컬", "중량(kg)": 20.0, "횟수": 15, "세트": 3},
     ]),
     "전신": pd.DataFrame([
         {"종목": "고블릿 스쿼트", "중량(kg)": 12.0, "횟수": 12, "세트": 3},
         {"종목": "푸시업", "중량(kg)": 0.0, "횟수": 12, "세트": 3},
         {"종목": "케이블 로우", "중량(kg)": 25.0, "횟수": 12, "세트": 3},
+        {"종목": "덤벨 숄더프레스", "중량(kg)": 8.0, "횟수": 12, "세트": 3},
+        {"종목": "플랭크", "중량(kg)": 0.0, "횟수": 60, "세트": 3},
     ]),
 }
 
@@ -1388,8 +1399,8 @@ def page_re_registration(members, sales):
         with col_wk:
             n_wk = st.selectbox("주차 이동", week_options_dynamic, index=idx_wk, key=f"re_wk_{m_id}")
 
+        # AI 재등록 상담 시나리오 가이드 생성 탭
         with st.expander(f"⚙️ '{m['name']}' 예상 재등록 회수/단가 수동 설정 & AI 상담 스크립트"):
-            # 1. 수동 예상 세션/단가 세팅
             ec1, ec2, ec3 = st.columns([2, 2, 1])
             new_exp_s = ec1.selectbox("예상 재등록 세션", [10, 20, 30, 40, 50], index=[10, 20, 30, 40, 50].index(curr_exp_sess) if curr_exp_sess in [10, 20, 30, 40, 50] else 0, key=f"cfg_exp_s_{m_id}")
             new_exp_p = ec2.number_input("예상 1회 단가(원)", min_value=10000, value=curr_exp_price, step=5000, key=f"cfg_exp_p_{m_id}")
@@ -1406,7 +1417,6 @@ def page_re_registration(members, sales):
 
             st.markdown("---")
 
-            # 2. AI 재등록 상담 시나리오 가이드
             m_inbody = inbody_df[pd.to_numeric(inbody_df["member_id"], errors="coerce") == m_id].sort_values("date")
             m_logs = logs_df[pd.to_numeric(logs_df["member_id"], errors="coerce") == m_id]
 
@@ -1446,7 +1456,7 @@ def page_re_registration(members, sales):
 > "{m['name']} 회원님, 그동안 진행된 수업 동안 **{inbody_summary}**의 긍정적인 신체 변화를 달성하셨습니다! 
 > 특히 **{weight_summary}**처럼 주요 근력 수행 능력이 체계적으로 향상되어, 목표하시던 주동근 자극 전달력이 매우 양호해진 상태입니다.
 > 
-> 다음 **3-STEP Phase 2 (타겟 고립 및 근지구력 극대화) 단계**로 이어서 진행하신다면 현재 향상된 근력을 바탕으로 훨씬 완성도 높은 신체 라인을 구축하실 수 있습니다!"
+> 다음 **3-STEP STEP 2 (타겟 고립 및 근지구력 극대화) 단계**로 이어서 진행하신다면 현재 향상된 근력을 바탕으로 훨씬 완성도 높은 신체 라인을 구축하실 수 있습니다!"
                 """)
 
         if n_exp != TR_EXPECT_OPTIONS[idx_exp] or n_re != RE_STATUS_OPTIONS[idx_re] or n_wk != week_options_dynamic[idx_wk]:
@@ -1689,7 +1699,7 @@ def page_bodyplan(members, reports):
 
 
 # =========================================================
-# 8. 페이지: 수업일지 작성 (히스토리 & 원클릭 복사 탑재)
+# 8. 페이지: 수업일지 작성 (템플릿 클릭 원터치 자동 연동)
 # =========================================================
 def page_journal(members, logs):
     st.title("📝 수업일지 작성 & 카톡 전송")
@@ -1728,12 +1738,18 @@ def page_journal(members, logs):
 
     end_time_sel = col_et.text_input("수업 종료 시간 (자동계산)", value=auto_end_time)
 
-    col_temp, col_btn = st.columns([3, 1])
-    sel_part = col_temp.selectbox("운동 루틴 템플릿 불러오기", ["선택 안 함", "가슴", "등", "어깨", "하체", "전신"])
+    # [수정/개선] 템플릿 선택 시 클릭 없이 하단 표에 즉시 연동
+    sel_part = st.selectbox(
+        "운동 루틴 템플릿 선택 (선택 시 아래 표에 즉시 불러오기)", 
+        ["선택 안 함", "가슴", "등", "어깨", "하체", "전신"],
+        key="journal_routine_selector"
+    )
 
-    if col_btn.button("템플릿 불러오기", use_container_width=True) and sel_part != "선택 안 함":
-        st.session_state["exercise_rows_df"] = PRESET_ROUTINES_DF.get(sel_part, PRESET_ROUTINES_DF["전신"]).copy()
-        rerun()
+    if sel_part != "선택 안 함":
+        if st.session_state.get("last_selected_preset") != sel_part:
+            st.session_state["exercise_rows_df"] = PRESET_ROUTINES_DF.get(sel_part).copy()
+            st.session_state["last_selected_preset"] = sel_part
+            rerun()
 
     if "exercise_rows_df" not in st.session_state:
         st.session_state["exercise_rows_df"] = pd.DataFrame([{"종목": "바벨 스쿼트", "중량(kg)": 40.0, "횟수": 10, "세트": 4}])
@@ -1821,7 +1837,7 @@ def page_journal(members, logs):
 
 
 # =========================================================
-# 9. 페이지: 회원 관리 (통합 클릭 뷰어 탑재)
+# 9. 페이지: 회원 관리 (회원명 클릭 시 통합 이력 조회)
 # =========================================================
 def page_members(members, sales, bookings, logs, reports):
     st.title("👥 회원 관리 & 성비 분석")
@@ -1914,7 +1930,7 @@ def page_members(members, sales, bookings, logs, reports):
             mask = view["name"].astype(str).str.contains(search, na=False) | view["contact"].astype(str).str.contains(search, na=False)
             view = view[mask]
 
-        st.caption(f"조회된 회원 수: {len(view)}명 (회원 이름을 클릭하면 지난 수업 이력과 메모를 조회할 수 있습니다)")
+        st.caption(f"조회된 회원 수: {len(view)}명 (회원 이름을 클릭하면 지난 수업 이력과 메모를 바로 조회할 수 있습니다)")
 
         memo_open_id = st.session_state.get("memo_open_id")
         re_pay_open_id = st.session_state.get("re_pay_open_id")
@@ -1935,7 +1951,6 @@ def page_members(members, sales, bookings, logs, reports):
 
             c_name, c_memo_btn, c_info, c_re_btn, c_btn1, c_btn2, c_del = st.columns([1.2, 0.7, 1.8, 0.8, 0.5, 0.5, 0.5])
 
-            # [핵심 추가] 회원 이름 클릭 시 이력 및 메모 모달/확장 뷰어 열기
             with c_name:
                 if st.button(f"👤 {m['name']}", key=f"btn_name_click_{m_id}_{idx}", use_container_width=True):
                     st.session_state["selected_detail_member_id"] = None if selected_detail_id == m_id else m_id
@@ -2002,7 +2017,7 @@ def page_members(members, sales, bookings, logs, reports):
                     st.toast(f"'{m['name']}' 회원의 모든 데이터가 완전 삭제되었습니다.")
                     rerun()
 
-            # [핵심 추가] 회원 이름 클릭 시 활성화되는 지난 수업 이력 및 메모 통합 뷰어
+            # 회원 이름 클릭 시 활성화되는 지난 수업 이력 및 메모 통합 뷰어
             if selected_detail_id == m_id:
                 st.markdown("---")
                 st.markdown(f"#### 🔍 '{m['name']}' 회원의 통합 상세 이력 & 메모 케어")
