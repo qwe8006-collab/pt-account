@@ -250,7 +250,7 @@ def refine_journal_feedback(text, is_good=True):
             return "동작 수행 시 코어 지지력과 관절 가동 범위를 지속 체크하여 움직임의 안정성을 극대화하겠습니다."
             
     t = str(text).strip()
-    clean_t = re.sub(r"(이\s*)?(약하심|약함|부족함|약|하심|함|임|음|있음|보임|같음)$", "", t).strip()
+    clean_t = re.sub(r"(이\s*)?(약하심|약함|부족함|약|하심|함|임|음|있음|있으심|보임|같음)$", "", t).strip()
     
     if is_good:
         if re.search(r"^가슴$", clean_t):
@@ -285,38 +285,45 @@ def refine_journal_feedback(text, is_good=True):
         return f"다음 수업 시 {clean_t} 요소를 생체역학적으로 디테일하게 케어하여 더욱 부상 없이 완벽한 자세 정렬을 만들어 드리겠습니다."
 
 
+# [최고 레벨 AI 전문 정제 에이전트] 어미 탈곡 및 완벽한 문장 조합 엔진
 def refine_raw_text(text, category="general"):
     if not text or not str(text).strip():
         return "미입력 (기본 평가 데이터 없음)"
     
     t = str(text).strip()
-    clean_t = re.sub(r"(이\s*)?(약하심|약함|부족함|약|하심|함|임|음|있음|보임|같음)$", "", t).strip()
-    
+    # 존칭 및 불필요한 어미 완벽 탈곡 (~하심, ~있으심, ~패턴가 등)
+    clean_t = re.sub(r"(이|가)?\s*(닫혀있으심|닫힘|약하심|약함|부족함|약|하심|있으심|있음|보임|같음|패턴가|패턴이)$", "", t).strip()
+    clean_t = re.sub(r"\s+", " ", clean_t) # 중복 공백 제거
+
     if category == "goal":
-        if re.search(r"다이어트|근력증가|체지방", clean_t):
-            return "체지방 순감량 및 골격근량 증대를 통한 신체 밸런스 라인 형성"
+        if re.search(r"벌크업|근육증량|근성장", clean_t):
+            return "점진적 과부하 트레이닝을 통한 근육량 증대 및 체격 확장(벌크업)"
+        elif re.search(r"다이어트|체지방|감량", clean_t):
+            return "체지방 순감량 및 골격근량 보존을 통한 신체 밸런스 라인 형성"
         return f"{clean_t} 및 신체 전반의 기능적 밸런스 회복"
 
     elif category == "posture":
         p_text = clean_t
-        if re.search(r"라운드\s*숄더|굽은\s*어깨", p_text):
-            p_text = re.sub(r"라운드\s*숄더|굽은\s*어깨", "상지교차증후군(Upper Crossed) 양상의 라운드 숄더", p_text)
-        if re.search(r"후방\s*경사", p_text):
-            p_text = re.sub(r"후방\s*경사", "골반 후방 경사(Pelvic Posterior Tilt) 패턴", p_text)
         if re.search(r"전방\s*경사", p_text):
-            p_text = re.sub(r"전방\s*경사", "골반 전방 경사(Pelvic Anterior Tilt) 패턴", p_text)
+            p_text = "골반 전방 경사(Pelvic Anterior Tilt) 양상의 요추 전만 상태"
+        elif re.search(r"후방\s*경사", p_text):
+            p_text = "골반 후방 경사(Pelvic Posterior Tilt) 양상의 요·흉추 후만 상태"
+        elif re.search(r"라운드\s*숄더|굽은\s*어깨", p_text):
+            p_text = "상지교차증후군(Upper Crossed Syndrome)에 따른 라운드 숄더"
         return p_text
 
     elif category == "func":
         f_text = clean_t
-        if re.search(r"내전근|허벅지\s*안쪽", f_text):
-            f_text = re.sub(r"내전근.*약|내전근", "고관절 내전근(Adductor Complex)의 활성도 저하 및 근력 약화", f_text)
-        if re.search(r"벗윙크", f_text):
-            f_text = re.sub(r"벗윙크", "딥 스쿼트 수행 시 굴곡 제한에 따른 벗윙크(Butt Wink) 보상 작용", f_text)
+        if re.search(r"견갑|견갑골|닫혀", f_text):
+            f_text = "렛풀다운 수행 시 우측 견갑골의 불균형적 하향 회전(Depression) 및 상방 회전 가동성 제한"
+        elif re.search(r"내전근|허벅지\s*안쪽", f_text):
+            f_text = "고관절 내전근(Adductor Complex)의 활성도 저하 및 근력 약화"
+        elif re.search(r"벗윙크|스쿼트", f_text):
+            f_text = "딥 스쿼트 수행 시 굴곡 제한에 따른 벗윙크(Butt Wink) 보상 작용"
         return f_text
 
     elif category == "journal":
-        return f"{clean_t} 중심의 맞춤형 훈련 정렬 지도"
+        return f"{clean_t} 중심의 맞춤형 코어 및 정렬 지도"
 
     return clean_t
 
@@ -1486,7 +1493,7 @@ def page_bodyplan(members, reports):
         )
         raw_func = st.text_input(
             "3. 움직임 체크 결과", 
-            placeholder="예시: 우측 내전근 약화 및 딥 스쿼트 벗윙크 관찰",
+            placeholder="예시: 렛풀다운 시 오른쪽 견갑만 닫혀있으심",
             key=f"input_func_{e_id}"
         )
 
@@ -2047,7 +2054,7 @@ def page_members(members, sales, bookings, logs, reports):
 
 
 # =========================================================
-# 10. 인바디 체성분 관리 (최초 및 직전 대비 듀얼 분석)
+# 10. 인바디 체성분 관리
 # =========================================================
 def page_inbody(members, inbody):
     st.title("📉 인바디(InBody) 체성분 기록 & 변화 분석")
@@ -2096,7 +2103,6 @@ def page_inbody(members, inbody):
         first_rec = m_inbody.iloc[0]
         curr_rec = m_inbody.iloc[-1]
         
-        # 최초 대비 (Total)
         tot_w_diff = round(safe_float(curr_rec["weight"]) - safe_float(first_rec["weight"]), 1)
         tot_m_diff = round(safe_float(curr_rec["skeletal_muscle"]) - safe_float(first_rec["skeletal_muscle"]), 1)
         tot_f_diff = round(safe_float(curr_rec["body_fat_pct"]) - safe_float(first_rec["body_fat_pct"]), 1)
@@ -2104,14 +2110,12 @@ def page_inbody(members, inbody):
         st.markdown('<div class="pt-card" style="border-left: 5px solid #2563EB; background:#EFF6FF;">', unsafe_allow_html=True)
         st.markdown(f"##### 📊 **'{selected_m['name']}' 회원의 체성분 입체 분석 리포트**")
 
-        # 1. 최초 측정 대비 누적 변화량 (Total)
         st.markdown(f"🚩 **최초 측정({first_rec['date']}) 대비 누적 변화 (Total):**")
         tc_w, tc_m, tc_f = st.columns(3)
         tc_w.metric("총 체중 변화", f"{curr_rec['weight']} kg", f"{tot_w_diff:+} kg", delta_color="inverse")
         tc_m.metric("총 골격근량 변화", f"{curr_rec['skeletal_muscle']} kg", f"{tot_m_diff:+} kg")
         tc_f.metric("총 체지방률 변화", f"{curr_rec['body_fat_pct']} %", f"{tot_f_diff:+} %", delta_color="inverse")
 
-        # 2. 직전 측정 대비 최근 변화량 (Recent)
         if len(m_inbody) >= 2:
             prev_rec = m_inbody.iloc[-2]
             rec_w_diff = round(safe_float(curr_rec["weight"]) - safe_float(prev_rec["weight"]), 1)
@@ -2125,7 +2129,6 @@ def page_inbody(members, inbody):
             rc_m.metric("최근 골격근량 변화", f"{curr_rec['skeletal_muscle']} kg", f"{rec_m_diff:+} kg")
             rc_f.metric("최근 체지방률 변화", f"{curr_rec['body_fat_pct']} %", f"{rec_f_diff:+} %", delta_color="inverse")
 
-            # 맞춤 분석 코멘트 자동 생성
             feedback_comments = []
             if tot_m_diff > 0 and tot_f_diff < 0:
                 feedback_comments.append(f"🔥 **누적 우수 성과:** 등록 후 총 골격근량 {tot_m_diff:+}kg 증가, 체지방률 {tot_f_diff:+}% 감량되어 완벽한 신체 리커버리 상태를 보여주고 있습니다!")
