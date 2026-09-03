@@ -242,7 +242,6 @@ def get_month_weeks_list(year, month):
     return [f"{w}주차" for w in range(1, len(cal) + 1)]
 
 
-# [완벽 수정] 어미 및 조사 결합 오류 원천 차단 전문 피드백 정제 엔진
 def refine_journal_feedback(text, is_good=True):
     if not text or not str(text).strip():
         if is_good:
@@ -251,7 +250,6 @@ def refine_journal_feedback(text, is_good=True):
             return "동작 수행 시 코어 지지력과 관절 가동 범위를 지속 체크하여 움직임의 안정성을 극대화하겠습니다."
             
     t = str(text).strip()
-    # 끝에 붙은 어미(~하심, ~약함, ~부족함, ~약, ~함 등)를 완벽하게 제거
     clean_t = re.sub(r"(이\s*)?(약하심|약함|부족함|약|하심|함|임|음|있음|보임|같음)$", "", t).strip()
     
     if is_good:
@@ -275,7 +273,6 @@ def refine_journal_feedback(text, is_good=True):
 
         return f"오늘 진행한 {clean_t} 수행 시 정확한 관절 정렬과 목표 주동근 자극 전달력이 매우 양호하게 관찰되었습니다."
     else:
-        # 보완할 점 구문별 맞춤 전문 가이드
         if re.search(r"접지|지면|발바닥", clean_t):
             return "하체 및 전신 동작 수행 시 발바닥 지면 접지력(Foot 삼각점 접지)과 아치 안정성을 보완하여 하중을 견고하게 지지해 드리겠습니다."
         elif re.search(r"흔들|불안정", clean_t):
@@ -285,7 +282,7 @@ def refine_journal_feedback(text, is_good=True):
         elif re.search(r"가동성|범위|타이트", clean_t):
             return "타이트해진 주요 관절 주변 근막을 원활히 이완하여 정상 가동 범위(ROM)를 확보해 나가겠습니다."
 
-        return f"다음 수업 시 {clean_t} 관련 요소를 생체역학적으로 디테일하게 케어하여 더욱 부상 없이 완벽한 자세 정렬을 만들어 드리겠습니다."
+        return f"다음 수업 시 {clean_t} 요소를 생체역학적으로 디테일하게 케어하여 더욱 부상 없이 완벽한 자세 정렬을 만들어 드리겠습니다."
 
 
 def refine_raw_text(text, category="general"):
@@ -1053,7 +1050,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
 
 # =========================================================
-# 5. 페이지: 수업 등록 (잔여 회차 0회 예약 차단 검증 반영)
+# 5. 페이지: 수업 등록
 # =========================================================
 def page_booking(members, bookings):
     st.title("🗓️ 수업 등록 & 스케줄 달력")
@@ -1702,7 +1699,7 @@ def page_bodyplan(members, reports):
 
 
 # =========================================================
-# 8. 페이지: 수업일지 작성 (점진적 과부하 자동 감지 반영)
+# 8. 페이지: 수업일지 작성 (템플릿 클릭 원터치 자동 연동)
 # =========================================================
 def page_journal(members, logs):
     st.title("📝 수업일지 작성 & 카톡 전송")
@@ -1839,7 +1836,7 @@ def page_journal(members, logs):
 
 
 # =========================================================
-# 9. 페이지: 회원 관리
+# 9. 페이지: 회원 관리 (통합 이력 & 수직 배치)
 # =========================================================
 def page_members(members, sales, bookings, logs, reports):
     st.title("👥 회원 관리 & 성비 분석")
@@ -1932,9 +1929,8 @@ def page_members(members, sales, bookings, logs, reports):
             mask = view["name"].astype(str).str.contains(search, na=False) | view["contact"].astype(str).str.contains(search, na=False)
             view = view[mask]
 
-        st.caption(f"조회된 회원 수: {len(view)}명 (회원 이름을 클릭하면 지난 수업 이력과 메모를 바로 조회할 수 있습니다)")
+        st.caption(f"조회된 회원 수: {len(view)}명 (회원 이름을 클릭하면 특이사항 메모와 지난 수업 이력을 연속해서 조회할 수 있습니다)")
 
-        memo_open_id = st.session_state.get("memo_open_id")
         re_pay_open_id = st.session_state.get("re_pay_open_id")
         selected_detail_id = st.session_state.get("selected_detail_member_id")
 
@@ -1951,20 +1947,15 @@ def page_members(members, sales, bookings, logs, reports):
 
             st.markdown('<div class="pt-card" style="padding-bottom:10px;">', unsafe_allow_html=True)
 
-            c_name, c_memo_btn, c_info, c_re_btn, c_btn1, c_btn2, c_del = st.columns([1.2, 0.7, 1.8, 0.8, 0.5, 0.5, 0.5])
+            # [수정] 메모 버튼 제거 후 깔끔하게 배치
+            c_name, c_info, c_re_btn, c_btn1, c_btn2, c_del = st.columns([1.5, 2.2, 0.9, 0.5, 0.5, 0.5])
 
             with c_name:
-                if st.button(f"👤 {m['name']}", key=f"btn_name_click_{m_id}_{idx}", use_container_width=True):
+                memo_tag = " ⭐" if has_memo else ""
+                if st.button(f"👤 {m['name']}{memo_tag}", key=f"btn_name_click_{m_id}_{idx}", use_container_width=True):
                     st.session_state["selected_detail_member_id"] = None if selected_detail_id == m_id else m_id
                     rerun()
                 st.markdown(f"{gender_badge} &nbsp; <span style='font-size:12px; color:#64748B;'>{m['contact']}</span>", unsafe_allow_html=True)
-
-            with c_memo_btn:
-                st.write("")
-                memo_btn_label = "📝 메모*" if has_memo else "📝 메모"
-                if st.button(memo_btn_label, key=f"btn_memo_click_{m_id}_{idx}", use_container_width=True):
-                    st.session_state["memo_open_id"] = None if memo_open_id == m_id else m_id
-                    rerun()
 
             with c_info:
                 st.markdown(f"목표: {m['goal']}")
@@ -2014,22 +2005,51 @@ def page_members(members, sales, bookings, logs, reports):
                     members = members[members["member_id"].astype(str) != str(m_id)]
                     save_members(members)
 
-                    if memo_open_id == m_id:
-                        st.session_state["memo_open_id"] = None
                     st.toast(f"'{m['name']}' 회원의 모든 데이터가 완전 삭제되었습니다.")
                     rerun()
 
+            # [통합 매끄러운 뷰어] 회원 이름 클릭 시 활성화되는 통합 메모 및 과거 수업일지 이력
             if selected_detail_id == m_id:
                 st.markdown("---")
-                st.markdown(f"#### 🔍 '{m['name']}' 회원의 통합 상세 이력 & 메모 케어")
+                st.markdown(f"#### 🔍 '{m['name']}' 회원의 통합 메모 및 수업 진행 이력")
                 
-                detail_memo_val = st.text_area("💬 회원 특이사항 메모 수정", value=str(m.get("memo") or ""), key=f"det_memo_ta_{m_id}", height=80)
-                if st.button("💾 메모 저장", key=f"btn_save_det_memo_{m_id}", type="primary"):
-                    members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "memo"] = str(detail_memo_val)
-                    save_members(members)
-                    st.toast("메모가 저장되었습니다.")
-                    rerun()
+                # 1. 특이사항 메모 및 사전 설문지 (상단)
+                memo_val = st.text_area(
+                    "💬 회원 특이사항 및 개별 코멘트 메모",
+                    value=str(m.get("memo") or ""),
+                    key=f"memo_ta_{m_id}",
+                    height=85,
+                )
 
+                with st.expander("🩺 PT 사전 상담 인테이크(Intake) 설문지 상세보기 / 수정", expanded=False):
+                    sur_c1, sur_c2 = st.columns(2)
+                    s_medical = sur_c1.text_input("과거/현재 병력 및 질환 이력", value=survey_dict.get("medical", ""), placeholder="예: 고혈압, 허리 디스크, 없음 등", key=f"sur_med_{m_id}")
+                    s_pain = sur_c2.text_input("통증 및 불편 부위", value=survey_dict.get("pain", ""), placeholder="예: 스쿼트 시 우측 무릎, 어깨 집힘 등", key=f"sur_pain_{m_id}")
+                    
+                    sur_c3, sur_c4 = sur_c1, sur_c2
+                    s_exp = sur_c3.text_input("운동 이력 및 PT 경험", value=survey_dict.get("exp", ""), placeholder="예: 헬스 6개월, PT 경험 10회 있음", key=f"sur_exp_{m_id}")
+                    s_habit = sur_c4.text_input("수면 / 식습관 / 음주 여부", value=survey_dict.get("habit", ""), placeholder="예: 하루 6시간 수면, 주 2회 음주", key=f"sur_hab_{m_id}")
+                    
+                    sur_c5, sur_c6 = st.columns(2)
+                    s_preferred_time = sur_c5.text_input("수업 가능 선호 시간대", value=survey_dict.get("preferred_time", ""), placeholder="예: 평일 저녁 7시 이후, 주말 오전 등", key=f"sur_time_{m_id}")
+                    s_style = sur_c6.text_input("선호하는 트레이닝 스타일", value=survey_dict.get("style", ""), placeholder="예: 자극 위주의 꼼꼼한 가이드, 강도 높은 웨이트", key=f"sur_style_{m_id}")
+
+                mc1, _ = st.columns([1, 1])
+                if mc1.button("💾 메모 & 사전 설문지 저장", key=f"memo_save_{m_id}", type="primary"):
+                    new_survey_json = json.dumps({
+                        "medical": s_medical, "pain": s_pain, "exp": s_exp, "habit": s_habit, 
+                        "preferred_time": s_preferred_time, "style": s_style
+                    }, ensure_ascii=False)
+                    
+                    members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "memo"] = str(memo_val)
+                    members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "survey_json"] = str(new_survey_json)
+                    
+                    if save_members(members):
+                        st.toast(f"'{m['name']}' 회원의 메모 및 사전 설문지가 저장되었습니다.")
+                        rerun()
+
+                st.write("")
+                # 2. 지난 수업일지 이력 (하단 배치)
                 st.markdown("##### 📜 진행되었던 수업일지 이력")
                 m_detail_logs = logs[pd.to_numeric(logs["member_id"], errors="coerce") == m_id].sort_values("date", ascending=False)
                 if m_detail_logs.empty:
@@ -2079,51 +2099,8 @@ def page_members(members, sales, bookings, logs, reports):
                         st.toast(f"🎉 '{m['name']}' 회원 {re_sess}회 재등록 ({tot_re_amount:,.0f}원) 결제 집계가 완료되었습니다!")
                         rerun()
 
-            if has_memo and memo_open_id != m_id and selected_detail_id != m_id:
+            if has_memo and selected_detail_id != m_id:
                 st.caption(f"💬 특이사항 메모: {m['memo']}")
-
-            if memo_open_id == m_id:
-                st.markdown("---")
-                st.markdown(f"#### 📋 '{m['name']}' 회원 특이사항 메모 및 사전 설문지 케어")
-                
-                memo_val = st.text_area(
-                    "💬 회원 특이사항 및 개별 코멘트 메모",
-                    value=str(m.get("memo") or ""),
-                    key=f"memo_ta_{m_id}",
-                    height=80,
-                )
-
-                with st.expander("🩺 PT 사전 상담 인테이크(Intake) 설문지 상세보기 / 수정", expanded=False):
-                    sur_c1, sur_c2 = st.columns(2)
-                    s_medical = sur_c1.text_input("과거/현재 병력 및 질환 이력", value=survey_dict.get("medical", ""), placeholder="예: 고혈압, 허리 디스크, 없음 등", key=f"sur_med_{m_id}")
-                    s_pain = sur_c2.text_input("통증 및 불편 부위", value=survey_dict.get("pain", ""), placeholder="예: 스쿼트 시 우측 무릎, 어깨 집힘 등", key=f"sur_pain_{m_id}")
-                    
-                    sur_c3, sur_c4 = sur_c1, sur_c2
-                    s_exp = sur_c3.text_input("운동 이력 및 PT 경험", value=survey_dict.get("exp", ""), placeholder="예: 헬스 6개월, PT 경험 10회 있음", key=f"sur_exp_{m_id}")
-                    s_habit = sur_c4.text_input("수면 / 식습관 / 음주 여부", value=survey_dict.get("habit", ""), placeholder="예: 하루 6시간 수면, 주 2회 음주", key=f"sur_hab_{m_id}")
-                    
-                    sur_c5, sur_c6 = st.columns(2)
-                    s_preferred_time = sur_c5.text_input("수업 가능 선호 시간대", value=survey_dict.get("preferred_time", ""), placeholder="예: 평일 저녁 7시 이후, 주말 오전 등", key=f"sur_time_{m_id}")
-                    s_style = sur_c6.text_input("선호하는 트레이닝 스타일", value=survey_dict.get("style", ""), placeholder="예: 자극 위주의 꼼꼼한 가이드, 강도 높은 웨이트", key=f"sur_style_{m_id}")
-
-                mc1, mc2 = st.columns([1, 1])
-                if mc1.button("💾 메모 & 사전 설문지 저장", key=f"memo_save_{m_id}", type="primary", use_container_width=True):
-                    new_survey_json = json.dumps({
-                        "medical": s_medical, "pain": s_pain, "exp": s_exp, "habit": s_habit, 
-                        "preferred_time": s_preferred_time, "style": s_style
-                    }, ensure_ascii=False)
-                    
-                    members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "memo"] = str(memo_val)
-                    members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "survey_json"] = str(new_survey_json)
-                    
-                    if save_members(members):
-                        st.session_state["memo_open_id"] = None
-                        st.toast(f"'{m['name']}' 회원의 메모 및 사전 설문지가 저장되었습니다.")
-                        rerun()
-
-                if mc2.button("닫기", key=f"memo_close_{m_id}", use_container_width=True):
-                    st.session_state["memo_open_id"] = None
-                    rerun()
 
             st.markdown('</div>', unsafe_allow_html=True)
 
