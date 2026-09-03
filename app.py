@@ -1113,7 +1113,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
 
 # =========================================================
-# 5. 페이지: 신규 상담 기록 관리 (삭제버튼 오류 보완 및 실시간 결제 집계)
+# 5. 페이지: 신규 상담 기록 관리 (실시간 검색 및 전환 수동 복구)
 # =========================================================
 def page_consultations(consultations, members, sales):
     st.title("💡 신규 상담 기록 관리 (독립 모수)")
@@ -1160,10 +1160,19 @@ def page_consultations(consultations, members, sales):
     st.write("")
     st.markdown("##### 📋 신규 상담 리스트 및 회원 전환 케어")
 
-    if consultations.empty:
-        st.info("등록된 신규 상담 기록이 없습니다.")
+    # [핵심 추가] 상담 고객 이름 / 연락처 실시간 검색창
+    consult_search = st.text_input("🔍 상담 고객 이름 / 연락처 검색", "", key="consult_search_input")
+
+    view_consults = consultations.copy()
+    if consult_search.strip():
+        c_mask = view_consults["name"].astype(str).str.contains(consult_search, na=False) | view_consults["contact"].astype(str).str.contains(consult_search, na=False)
+        view_consults = view_consults[c_mask]
+
+    if view_consults.empty:
+        st.info("조회되거나 등록된 신규 상담 기록이 없습니다.")
     else:
-        for idx, c in consultations.sort_values("date", ascending=False).iterrows():
+        st.caption(f"총 {len(view_consults)}건의 상담 기록이 표시됩니다.")
+        for idx, c in view_consults.sort_values("date", ascending=False).iterrows():
             c_id = int(c["consult_id"])
             is_conv = bool(c.get("converted", False))
             conv_tag = '<b style="color:#166534;">🟢 회원 등록 완료</b>' if is_conv else '<b style="color:#2563EB;">⏳ 상담 진행중</b>'
@@ -1186,7 +1195,7 @@ def page_consultations(consultations, members, sales):
                     
                     consultations = consultations[consultations["consult_id"].astype(str) != str(c_id)]
                     save_consultations(consultations)
-                    st.toast("상담 기록이 삭제되었습니다.")
+                    st.toast("상담 기록이 완전 삭제되었습니다.")
                     rerun()
 
             with st.expander(f"💬 '{c['name']}' 상세 상담 메모 및 회원 전환 이관 설정", expanded=False):
@@ -1239,6 +1248,14 @@ def page_consultations(consultations, members, sales):
 
                             st.toast(f"🎉 '{c['name']}' 회원이 {re_sess}회({tot_pay:,.0f}원) 결제 집계와 함께 이관 등록되었습니다!")
                             rerun()
+                else:
+                    # [핵심 추가] 이미 전환되었으나 회원이 삭제되어 복구가 필요한 경우 수동 상태 초기화 버튼
+                    st.markdown("---")
+                    if st.button("🔄 전환 상태 초기화 (상담 진행중으로 변경)", key=f"btn_reset_conv_{c_id}"):
+                        consultations.loc[consultations["consult_id"] == c_id, "converted"] = False
+                        save_consultations(consultations)
+                        st.toast("상담 상태가 '상담 진행중'으로 초기화되었습니다.")
+                        rerun()
 
             st.markdown('</div>', unsafe_allow_html=True)
 
@@ -1867,7 +1884,7 @@ def page_journal(members, logs):
 
 
 # =========================================================
-# 9. 페이지: 회원 관리 (회원 삭제 시 상담 상태 복구 연동)
+# 9. 페이지: 회원 관리 (회원 삭제 시 상담 상태 연동 초기화)
 # =========================================================
 def page_members(members, sales, bookings, logs, reports):
     st.title("👥 회원 관리 & 성비 분석")
