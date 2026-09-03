@@ -139,7 +139,7 @@ def rerun():
 
 
 # =========================================================
-# 1. 컬럼 정의 & 템플릿 (대표 운동 확장)
+# 1. 컬럼 정의 & 템플릿
 # =========================================================
 MEMBERS_COLUMNS = [
     "member_id", "name", "contact", "birth_date", "reg_date",
@@ -164,7 +164,6 @@ RE_STATUS_OPTIONS = ["결제완료", "결제예정", "이월", "이탈", "전월
 TIME_SLOTS = [f"{h:02d}:00" for h in range(6, 23)]
 WEEKDAY_LABELS_KR = ["일", "월", "화", "수", "목", "금", "토"]
 
-# [확장] 부위별 필수 대표 운동 5종씩 풍성하게 배치
 PRESET_ROUTINES_DF = {
     "가슴": pd.DataFrame([
         {"종목": "바벨 벤치프레스", "중량(kg)": 40.0, "횟수": 10, "세트": 4},
@@ -243,6 +242,7 @@ def get_month_weeks_list(year, month):
     return [f"{w}주차" for w in range(1, len(cal) + 1)]
 
 
+# [완벽 수정] 어미 및 조사 결합 오류 원천 차단 전문 피드백 정제 엔진
 def refine_journal_feedback(text, is_good=True):
     if not text or not str(text).strip():
         if is_good:
@@ -251,7 +251,8 @@ def refine_journal_feedback(text, is_good=True):
             return "동작 수행 시 코어 지지력과 관절 가동 범위를 지속 체크하여 움직임의 안정성을 극대화하겠습니다."
             
     t = str(text).strip()
-    clean_t = re.sub(r"(하심|함|임|음|있음|보임|같음)$", "", t).strip()
+    # 끝에 붙은 어미(~하심, ~약함, ~부족함, ~약, ~함 등)를 완벽하게 제거
+    clean_t = re.sub(r"(이\s*)?(약하심|약함|부족함|약|하심|함|임|음|있음|보임|같음)$", "", t).strip()
     
     if is_good:
         if re.search(r"^가슴$", clean_t):
@@ -263,25 +264,28 @@ def refine_journal_feedback(text, is_good=True):
         elif re.search(r"^하체$", clean_t):
             return "고관절 및 대퇴사두근 수축 타이밍을 정확히 맞추어 하중 분산을 안정적으로 가져가셨습니다."
 
-        if re.search(r"이해|빠름|좋", clean_t):
-            return f"새로운 운동 동작 패턴임에도 불구하고 우수한 고유수용성 감각과 운동 학습 능력을 바탕으로 목표 주동근 자극을 효율적으로 형성하셨습니다."
+        if re.search(r"운동신경|신경|센스|이해|빠름|좋", clean_t):
+            return "새로운 운동 동작 패턴임에도 불구하고 우수한 운동신경과 고유수용성 감각을 바탕으로 목표 주동근 자극을 효율적으로 형성하셨습니다."
         elif re.search(r"자극|타겟", clean_t):
-            return f"목표 주동근의 정확한 타겟점을 인지하고 고립 수축 자극을 매우 효율적으로 전달하셨습니다."
+            return "목표 주동근의 정확한 타겟점을 인지하고 고립 수축 자극을 매우 효율적으로 전달하셨습니다."
         elif re.search(r"자세|궤적", clean_t):
-            return f"관절 정렬 및 동작 궤적이 매우 안정적으로 제어되어 완성도 높은 운동을 수행하셨습니다."
+            return "관절 정렬 및 동작 궤적이 매우 안정적으로 제어되어 완성도 높은 운동을 수행하셨습니다."
         elif re.search(r"복압|코어|중심", clean_t):
-            return f"호흡 패턴을 통한 코어 복압을 견고하게 유지하여 운동 수행 시 신체 하중을 안정적으로 분산하셨습니다."
+            return "호흡 패턴을 통한 코어 복압을 견고하게 유지하여 운동 수행 시 신체 하중을 안정적으로 분산하셨습니다."
 
         return f"오늘 진행한 {clean_t} 수행 시 정확한 관절 정렬과 목표 주동근 자극 전달력이 매우 양호하게 관찰되었습니다."
     else:
-        if re.search(r"흔들|불안정", clean_t):
+        # 보완할 점 구문별 맞춤 전문 가이드
+        if re.search(r"접지|지면|발바닥", clean_t):
+            return "하체 및 전신 동작 수행 시 발바닥 지면 접지력(Foot 삼각점 접지)과 아치 안정성을 보완하여 하중을 견고하게 지지해 드리겠습니다."
+        elif re.search(r"흔들|불안정", clean_t):
             return "동작 수행 시 코어 복압 유지와 요·휘두 관절 복합체(LSC)의 동적 안정성을 보완하여 움직임의 흔들림을 최소화해 드리겠습니다."
         elif re.search(r"근력|힘", clean_t):
             return "점진적 과부하 트레이닝을 위해 주요 관절 주변부 지지 근력 및 코어 안정성을 지속적으로 보완해 나가겠습니다."
         elif re.search(r"가동성|범위|타이트", clean_t):
             return "타이트해진 주요 관절 주변 근막을 원활히 이완하여 정상 가동 범위(ROM)를 확보해 나가겠습니다."
 
-        return f"다음 수업 시 {clean_t} 요소를 생체역학적으로 디테일하게 케어하여 더욱 부상 없이 완벽한 자세 정렬을 만들어 드리겠습니다."
+        return f"다음 수업 시 {clean_t} 관련 요소를 생체역학적으로 디테일하게 케어하여 더욱 부상 없이 완벽한 자세 정렬을 만들어 드리겠습니다."
 
 
 def refine_raw_text(text, category="general"):
@@ -289,7 +293,7 @@ def refine_raw_text(text, category="general"):
         return "미입력 (기본 평가 데이터 없음)"
     
     t = str(text).strip()
-    clean_t = re.sub(r"(하심|함|임|음|있음|보임|같음)$", "", t).strip()
+    clean_t = re.sub(r"(이\s*)?(약하심|약함|부족함|약|하심|함|임|음|있음|보임|같음)$", "", t).strip()
     
     if category == "goal":
         if re.search(r"다이어트|근력증가|체지방", clean_t):
@@ -1399,7 +1403,6 @@ def page_re_registration(members, sales):
         with col_wk:
             n_wk = st.selectbox("주차 이동", week_options_dynamic, index=idx_wk, key=f"re_wk_{m_id}")
 
-        # AI 재등록 상담 시나리오 가이드 생성 탭
         with st.expander(f"⚙️ '{m['name']}' 예상 재등록 회수/단가 수동 설정 & AI 상담 스크립트"):
             ec1, ec2, ec3 = st.columns([2, 2, 1])
             new_exp_s = ec1.selectbox("예상 재등록 세션", [10, 20, 30, 40, 50], index=[10, 20, 30, 40, 50].index(curr_exp_sess) if curr_exp_sess in [10, 20, 30, 40, 50] else 0, key=f"cfg_exp_s_{m_id}")
@@ -1699,7 +1702,7 @@ def page_bodyplan(members, reports):
 
 
 # =========================================================
-# 8. 페이지: 수업일지 작성 (템플릿 클릭 원터치 자동 연동)
+# 8. 페이지: 수업일지 작성 (점진적 과부하 자동 감지 반영)
 # =========================================================
 def page_journal(members, logs):
     st.title("📝 수업일지 작성 & 카톡 전송")
@@ -1738,7 +1741,6 @@ def page_journal(members, logs):
 
     end_time_sel = col_et.text_input("수업 종료 시간 (자동계산)", value=auto_end_time)
 
-    # [수정/개선] 템플릿 선택 시 클릭 없이 하단 표에 즉시 연동
     sel_part = st.selectbox(
         "운동 루틴 템플릿 선택 (선택 시 아래 표에 즉시 불러오기)", 
         ["선택 안 함", "가슴", "등", "어깨", "하체", "전신"],
@@ -1760,8 +1762,8 @@ def page_journal(members, logs):
     st.markdown('<div class="pt-card">', unsafe_allow_html=True)
     st.markdown("##### ✏️ 피드백 메모 기입")
 
-    good_raw = st.text_input("오늘 잘한 점 (메모)", placeholder="예시: 가슴 또는 처음하는 동작인데도 이해력이 좋으심")
-    improve_raw = st.text_input("보완할 점 (메모)", placeholder="예시: 몸통이 많이 흔들리심")
+    good_raw = st.text_input("오늘 잘한 점 (메모)", placeholder="예시: 운동신경이 좋으심 또는 가슴 자극 좋음")
+    improve_raw = st.text_input("보완할 점 (메모)", placeholder="예시: 지면 접지력이 약하심 또는 몸통 흔들림")
 
     if st.button("🤖 AI 수업 피드백 문장 고도화 완성", type="primary"):
         g_ref = refine_journal_feedback(good_raw, is_good=True)
@@ -1837,7 +1839,7 @@ def page_journal(members, logs):
 
 
 # =========================================================
-# 9. 페이지: 회원 관리 (회원명 클릭 시 통합 이력 조회)
+# 9. 페이지: 회원 관리
 # =========================================================
 def page_members(members, sales, bookings, logs, reports):
     st.title("👥 회원 관리 & 성비 분석")
@@ -2017,7 +2019,6 @@ def page_members(members, sales, bookings, logs, reports):
                     st.toast(f"'{m['name']}' 회원의 모든 데이터가 완전 삭제되었습니다.")
                     rerun()
 
-            # 회원 이름 클릭 시 활성화되는 지난 수업 이력 및 메모 통합 뷰어
             if selected_detail_id == m_id:
                 st.markdown("---")
                 st.markdown(f"#### 🔍 '{m['name']}' 회원의 통합 상세 이력 & 메모 케어")
