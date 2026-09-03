@@ -680,7 +680,7 @@ def build_4step_report_html(member, report):
 
 
 # =========================================================
-# 4. 페이지 1: 센터 대시보드 (통합 수업 예약 등록 포함)
+# 4. 페이지 1: 센터 대시보드
 # =========================================================
 def page_dashboard(members, logs, sales, reports, bookings):
     st.title("📊 PT Account 통합 대시보드")
@@ -920,7 +920,6 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # 대시보드 당일 상세 수업 스케줄 및 통합 신규 수업 예약 등록
     sel_date_str = st.session_state["dash_selected_date"]
     st.markdown('<div class="pt-card" style="border-top: 4px solid #2563EB;">', unsafe_allow_html=True)
     st.markdown(f"#### 📌 **{sel_date_str}** 상세 수업 스케줄")
@@ -1022,7 +1021,6 @@ def page_dashboard(members, logs, sales, reports, bookings):
                         st.toast(f"{m_name} 회원의 {s_time} 예약이 취소되었습니다.")
                         rerun()
 
-    # [이관 및 통합] 선택한 날짜에 바로 신규 수업 예약 등록 폼 노출
     st.markdown("---")
     st.markdown(f"##### ➕ **{sel_date_str}** 신규 수업 예약 등록")
 
@@ -1732,7 +1730,7 @@ def page_journal(members, logs):
 
 
 # =========================================================
-# 9. 페이지: 회원 관리 (메모 버튼 제거 및 수직 통합 배치)
+# 9. 페이지: 회원 관리 (회원 완전 삭제 강화 및 중복 뷰 완전 제거)
 # =========================================================
 def page_members(members, sales, bookings, logs, reports):
     st.title("👥 회원 관리 & 성비 분석")
@@ -1825,7 +1823,7 @@ def page_members(members, sales, bookings, logs, reports):
             mask = view["name"].astype(str).str.contains(search, na=False) | view["contact"].astype(str).str.contains(search, na=False)
             view = view[mask]
 
-        st.caption(f"조회된 회원 수: {len(view)}명 (회원 이름을 클릭하면 특이사항 메모와 지난 수업 이력을 한눈에 조회할 수 있습니다)")
+        st.caption(f"조회된 회원 수: {len(view)}명 (회원 이름을 클릭하면 메모와 지난 수업 이력을 연속해서 조회할 수 있습니다)")
 
         re_pay_open_id = st.session_state.get("re_pay_open_id")
         selected_detail_id = st.session_state.get("selected_detail_member_id")
@@ -1843,7 +1841,6 @@ def page_members(members, sales, bookings, logs, reports):
 
             st.markdown('<div class="pt-card" style="padding-bottom:10px;">', unsafe_allow_html=True)
 
-            # 메모 버튼 제거 후 깔끔하게 컬럼 재배치
             c_name, c_info, c_re_btn, c_btn1, c_btn2, c_del = st.columns([1.5, 2.2, 0.9, 0.5, 0.5, 0.5])
 
             with c_name:
@@ -1882,13 +1879,12 @@ def page_members(members, sales, bookings, logs, reports):
             with c_del:
                 st.write("")
                 if st.button("🗑️", key=f"btn_del_mem_{m_id}_{idx}", use_container_width=True):
-                    supabase.table("bookings").delete().eq("member_id", m_id).execute()
-                    supabase.table("logs").delete().eq("member_id", m_id).execute()
-                    supabase.table("reports").delete().eq("member_id", m_id).execute()
-                    supabase.table("inbody").delete().eq("member_id", m_id).execute()
-                    supabase.table("sales").delete().eq("member_id", m_id).execute()
-                    supabase.table("members").delete().eq("member_id", m_id).execute()
+                    # DB 완전 삭제 (int 및 str 타입 모두 대응)
+                    for tbl in ["bookings", "logs", "reports", "inbody", "sales", "members"]:
+                        supabase.table(tbl).delete().eq("member_id", m_id).execute()
+                        supabase.table(tbl).delete().eq("member_id", str(m_id)).execute()
 
+                    # 세션 상태 캐시 완전 동기화
                     if "bookings_df" in st.session_state:
                         st.session_state["bookings_df"] = st.session_state["bookings_df"][st.session_state["bookings_df"]["member_id"].astype(str) != str(m_id)]
                     if "logs_df" in st.session_state:
@@ -1897,14 +1893,18 @@ def page_members(members, sales, bookings, logs, reports):
                         st.session_state["reports_df"] = st.session_state["reports_df"][st.session_state["reports_df"]["member_id"].astype(str) != str(m_id)]
                     if "sales_df" in st.session_state:
                         st.session_state["sales_df"] = st.session_state["sales_df"][st.session_state["sales_df"]["member_id"].astype(str) != str(m_id)]
+                    if "inbody_df" in st.session_state:
+                        st.session_state["inbody_df"] = st.session_state["inbody_df"][st.session_state["inbody_df"]["member_id"].astype(str) != str(m_id)]
 
                     members = members[members["member_id"].astype(str) != str(m_id)]
                     save_members(members)
 
+                    if selected_detail_id == m_id:
+                        st.session_state["selected_detail_member_id"] = None
                     st.toast(f"'{m['name']}' 회원의 모든 데이터가 완전 삭제되었습니다.")
                     rerun()
 
-            # [통합 매끄러운 뷰어] 회원 이름 클릭 시 활성화되는 메모 수정을 상단, 수업 이력을 최하단에 배치
+            # [통합 매끄러운 뷰어] 회원 이름 클릭 시 활성화되는 통합 메모 및 과거 수업일지 이력
             if selected_detail_id == m_id:
                 st.markdown("---")
                 st.markdown(f"#### 📋 '{m['name']}' 회원 특이사항 메모 및 사전 설문지 케어")
