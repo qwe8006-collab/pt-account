@@ -449,6 +449,7 @@ def next_id(df, id_col):
     return int(pd.to_numeric(df[id_col], errors="coerce").fillna(0).max()) + 1
 
 
+# [완벽 고도화] 동종 운동 자동 추적 점진적 과부하(PR) 감지기
 def generate_friendly_message_from_data(member_id, member_name, rem_sessions, exercises_df, good, improve):
     ex_summary = []
     weight_increases = []
@@ -456,6 +457,7 @@ def generate_friendly_message_from_data(member_id, member_name, rem_sessions, ex
     logs_df = st.session_state.get("logs_df", fetch_table("logs", LOGS_COLUMNS))
     m_past_logs = logs_df[pd.to_numeric(logs_df["member_id"], errors="coerce") == int(member_id)]
 
+    # 과거 해당 회원의 종목별 최고 수행 중량 맵 생성
     past_max_weights = {}
     if not m_past_logs.empty:
         for _, plog in m_past_logs.iterrows():
@@ -479,6 +481,7 @@ def generate_friendly_message_from_data(member_id, member_name, rem_sessions, ex
                 s = int(safe_float(row.get("세트", 0)))
                 ex_summary.append(f"  • {item}: {w}kg x {c}회 x {s}세트")
 
+                # 동일 종목의 과거 최고 중량 대비 오늘 중량이 커졌을 때만 감지
                 if item in past_max_weights:
                     prev_w = past_max_weights[item]
                     if w > prev_w:
@@ -1593,7 +1596,7 @@ def page_bodyplan(members, reports):
 
 
 # =========================================================
-# 8. 페이지: 수업일지 작성 (일지 저장 시 세션 자동 차감 로직 완전 제거)
+# 8. 페이지: 수업일지 작성
 # =========================================================
 def page_journal(members, logs):
     st.title("📝 수업일지 작성 & 카톡 전송")
@@ -1686,7 +1689,6 @@ def page_journal(members, logs):
     """
     components.html(copy_html, height=50)
 
-    # [핵심 수정] 수업일지 저장 시 세션 차감 완전 제외 (세션 차감은 대시보드 달력 출결 버튼 전용)
     if st.button("✅ 일지 저장", type="primary", use_container_width=True):
         valid_rows = edited_df[edited_df["종목"].astype(str).str.strip() != ""]
 
@@ -2050,7 +2052,7 @@ def page_members(members, sales, bookings, logs, reports):
 
 
 # =========================================================
-# 10. 인바디 체성분 관리
+# 10. 인바디 체성분 관리 (이전 측정값 대비 변화 및 AI 정밀 분석)
 # =========================================================
 def page_inbody(members, inbody):
     st.title("📉 인바디(InBody) 체성분 기록 & 변화 분석")
@@ -2096,6 +2098,41 @@ def page_inbody(members, inbody):
     if m_inbody.empty:
         st.info(f"'{selected_m['name']}' 회원의 인바디 측정 기록이 없습니다.")
     else:
+        # [핵심 추가] 이전 기록 대비 변화량 분석 및 AI 피드백 브리핑
+        if len(m_inbody) >= 2:
+            prev_rec = m_inbody.iloc[-2]
+            curr_rec = m_inbody.iloc[-1]
+
+            w_diff = round(safe_float(curr_rec["weight"]) - safe_float(prev_rec["weight"]), 1)
+            m_diff = round(safe_float(curr_rec["skeletal_muscle"]) - safe_float(prev_rec["skeletal_muscle"]), 1)
+            f_diff = round(safe_float(curr_rec["body_fat_pct"]) - safe_float(prev_rec["body_fat_pct"]), 1)
+
+            st.markdown('<div class="pt-card" style="border-left: 5px solid #2563EB; background:#EFF6FF;">', unsafe_allow_html=True)
+            st.markdown(f"##### 📊 **'{selected_m['name']}' 회원의 직전 측정({prev_rec['date']}) 대비 변화량 및 AI 분석**")
+            
+            c_w, c_m, c_f = st.columns(3)
+            c_w.metric("체중 변화", f"{curr_rec['weight']} kg", f"{w_diff:+} kg", delta_color="inverse")
+            c_m.metric("골격근량 변화", f"{curr_rec['skeletal_muscle']} kg", f"{m_diff:+} kg")
+            c_f.metric("체지방률 변화", f"{curr_rec['body_fat_pct']} %", f"{f_diff:+} %", delta_color="inverse")
+
+            # 맞춤 분석 코멘트 자동 생성
+            feedback_comments = []
+            if m_diff > 0 and f_diff < 0:
+                feedback_comments.append("🔥 **우수한 체성분 개선:** 골격근량이 증가하면서 체지방률이 감량되어 대사 효율과 신체 밸런스가 매우 이상적으로 발전하고 있습니다!")
+            elif m_diff > 0:
+                feedback_comments.append("💪 **근력 및 골격근 발달:** 골격근량이 순조롭게 증가 중입니다. 현 루틴의 부하 과부하 세팅이 효과적으로 작용하고 있습니다.")
+            elif f_diff < 0:
+                feedback_comments.append("📉 **체지방 감량 호조:** 체지방 감소 추세가 매우 양호합니다. 현재의 영양 및 유산소 훈련 비중을 유지해 주세요.")
+
+            if m_diff < 0:
+                feedback_comments.append("⚠️ **근손실 주의 보완점:** 골격근량이 일시적으로 소폭 감소했습니다. 단백질 섭취량과 점진적 부하 훈련 세팅을 강화할 필요가 있습니다.")
+            if f_diff > 0:
+                feedback_comments.append("💡 **식단 케어 보완점:** 체지방률이 소폭 상승했습니다. 주말 식습관 및 수면/스트레스 관리를 함께 체크해 드리겠습니다.")
+
+            comment_disp = "\n\n".join(feedback_comments) if feedback_comments else "현재 체성분 수치가 안정적으로 유지되고 있습니다."
+            st.markdown(f"<div style='margin-top:10px; font-size:14px; color:#1E293B;'>{comment_disp}</div>", unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+
         st.markdown('<div class="pt-card">', unsafe_allow_html=True)
         st.subheader(f"📈 '{selected_m['name']}' 회원 체성분 변화 추이 그래프")
 
