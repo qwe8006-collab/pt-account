@@ -1125,7 +1125,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
 
 # =========================================================
-# 5. 페이지: 통합 신규 상담 & 재등록 파이프라인 관리 탭 (예상 매출 합계 요약 포함)
+# 5. 페이지: 통합 신규 상담 & 재등록 파이프라인 관리 탭
 # =========================================================
 def page_consultations(consultations, members, sales):
     st.title("💡 신규 상담 & 재등록 파이프라인 관리")
@@ -1133,15 +1133,13 @@ def page_consultations(consultations, members, sales):
     today = get_kst_now().date()
     curr_weeks = get_month_weeks_list(today.year, today.month)
 
-    # 1. 신규 상담 예상 매출 합계 계산 (미전환건 중 높음 100%, 중간 50% 반영)
+    # 1. 신규 상담 단순 합계 (가중치 제거: 높음 + 중간 원금 100% 합산)
     unconverted_consults = consultations[consultations["converted"] != True]
     c_high_cnt = len(unconverted_consults[unconverted_consults["expect_status"] == "높음"])
     c_mid_cnt = len(unconverted_consults[unconverted_consults["expect_status"] == "중간"])
-    
-    # 신규 상담 기본 예상 금액 세팅 (10회 70만원 = 700,000원 기준)
-    consult_pipeline_amount = (c_high_cnt * 700000) + int(c_mid_cnt * 700000 * 0.5)
+    consult_pipeline_amount = (c_high_cnt + c_mid_cnt) * 700000
 
-    # 2. 기존 회원 재등록 예상 매출 합계 계산
+    # 2. 기존 회원 재등록 단순 합계 (가중치 제거: 높음 + 중간 원금 100% 합산)
     re_pipeline_amount = 0
     re_high_amount = 0
     re_mid_amount = 0
@@ -1182,14 +1180,15 @@ def page_consultations(consultations, members, sales):
         })
 
     df_tr = pd.DataFrame(chart_data_tr)
+    tot_exp_grand = consult_pipeline_amount + re_pipeline_amount
 
-    # [핵심 추가] 각 탭별 예상 매출액 합계 요약 카운터
-    st.markdown("##### 💡 당월 파이프라인 통합 예상 매출액 요약")
+    # [수정] 가중치 없는 깔끔한 단순 합계 요약 카운터
+    st.markdown("##### 💡 당월 파이프라인 통합 예상 매출액 단순 합계")
     p_col1, p_col2, p_col3, p_col4 = st.columns(4)
-    p_col1.metric("💡 신규 상담 예상 매출", f"{consult_pipeline_amount:,.0f}원")
-    p_col2.metric("🎯 재등록 총 예상 매출", f"{re_pipeline_amount:,.0f}원")
-    p_col3.metric("🟢 재등록 확정형(높음)", f"{re_high_amount:,.0f}원")
-    p_col4.metric("🟡 재등록 가능형(중간 50%)", f"{int(re_mid_amount * 0.5):,.0f}원")
+    p_col1.metric("🔥 총 예상합계 (신규+재등록)", f"{tot_exp_grand:,.0f}원")
+    p_col2.metric("💡 신규 상담 예상 합계", f"{consult_pipeline_amount:,.0f}원")
+    p_col3.metric("🎯 재등록 예상 합계", f"{re_pipeline_amount:,.0f}원")
+    p_col4.metric("🟢 재등록 확정형 (높음)", f"{re_high_amount:,.0f}원")
 
     st.write("")
 
@@ -1311,10 +1310,12 @@ def page_consultations(consultations, members, sales):
             c_mask = view_consults["name"].astype(str).str.contains(consult_search, na=False) | view_consults["contact"].astype(str).str.contains(consult_search, na=False)
             view_consults = view_consults[c_mask]
 
+        sel_consult_id = st.session_state.get("selected_consult_detail_id")
+
         if view_consults.empty:
             st.info("조회되거나 등록된 신규 상담 기록이 없습니다.")
         else:
-            st.caption(f"총 {len(view_consults)}건의 상담 기록이 표시됩니다.")
+            st.caption(f"총 {len(view_consults)}건의 상담 기록이 표시됩니다. (고객 이름을 클릭하면 상세 상담 메모와 이관 설정이 열립니다)")
             for idx, c in view_consults.sort_values("date", ascending=False).iterrows():
                 c_id = int(c["consult_id"])
                 is_conv = bool(c.get("converted", False))
@@ -1323,13 +1324,21 @@ def page_consultations(consultations, members, sales):
                 expect_badge = get_expect_badge_html(c.get("expect_status"))
 
                 st.markdown('<div class="pt-card">', unsafe_allow_html=True)
-                col_cs1, col_cs2 = st.columns([3.5, 0.5])
+                col_cs1, col_cs2, col_cs3 = st.columns([1.5, 2.5, 0.5])
 
+                # [개선] 이름 클릭 토글 방식 UI
                 with col_cs1:
-                    st.markdown(f"<b>👤 {c['name']} 고객님</b> {g_badge} &nbsp;&nbsp; {conv_tag} &nbsp; <span style='font-size:12px; color:#64748B;'>상담일: {c['date']} | 연락처: {c['contact']}</span>", unsafe_allow_html=True)
-                    st.markdown(f"<div style='font-size:13.5px; margin-top:4px;'>🎯 <b>목적:</b> {c.get('goal','-')} | 📍 <b>유입:</b> {c.get('source','-')} | 📊 <b>전환 가능성:</b> {expect_badge}</div>", unsafe_allow_html=True)
+                    if st.button(f"👤 {c['name']}", key=f"btn_c_name_{c_id}_{idx}", use_container_width=True):
+                        st.session_state["selected_consult_detail_id"] = None if sel_consult_id == c_id else c_id
+                        rerun()
+                    st.markdown(f"{g_badge} &nbsp; {expect_badge}", unsafe_allow_html=True)
 
                 with col_cs2:
+                    st.markdown(f"<b>상태:</b> {conv_tag} <span style='font-size:12px; color:#64748B;'> | 상담일: {c['date']} | 연락처: {c['contact']}</span>", unsafe_allow_html=True)
+                    st.caption(f"🎯 목적: {c.get('goal','-')} | 📍 유입: {c.get('source','-')}")
+
+                with col_cs3:
+                    st.write("")
                     if st.button("🗑️", key=f"btn_del_consult_{c_id}_{idx}", use_container_width=True):
                         try:
                             supabase.table("consultations").delete().eq("consult_id", c_id).execute()
@@ -1340,13 +1349,21 @@ def page_consultations(consultations, members, sales):
                         st.toast("상담 기록이 삭제되었습니다.")
                         rerun()
 
-                with st.expander(f"💬 '{c['name']}' 상세 상담 메모 및 회원 전환 이관 설정", expanded=False):
-                    if c.get("memo"):
-                        st.markdown(f"**상담 메모:**\n{c['memo']}")
+                # [이름 클릭 시 펼쳐지는 깔끔한 통합 메모 & 이관 서브 카드]
+                if sel_consult_id == c_id:
+                    st.markdown("---")
+                    st.markdown(f"##### 💬 '{c['name']}' 고객 상세 상담 메모 작성 / 수정")
+                    
+                    edit_c_memo = st.text_area("상담 특이사항 메모", value=str(c.get("memo") or ""), key=f"ta_c_memo_{c_id}", height=85)
+                    if st.button("💾 상담 메모 저장", key=f"btn_save_cmemo_{c_id}", type="primary"):
+                        consultations.loc[consultations["consult_id"] == c_id, "memo"] = str(edit_c_memo)
+                        save_consultations(consultations)
+                        st.toast("상담 메모가 저장되었습니다.")
+                        rerun()
 
                     if not is_conv:
                         st.markdown("---")
-                        st.markdown("##### 💳 결제 조건 기입 및 회원 관리로 즉시 이관")
+                        st.markdown("##### 💳 결제 세션/단가 지정 후 실제 회원으로 즉시 이관")
                         ec1, ec2, ec3 = st.columns([1.2, 1.5, 1.5])
                         re_sess = ec1.selectbox("등록 세션 수(회)", [10, 20, 30, 40, 50], index=0, key=f"c_sess_{c_id}")
                         re_price = ec2.number_input("1회 세션 단가(원)", min_value=10000, value=70000, step=5000, key=f"c_price_{c_id}")
@@ -1366,8 +1383,8 @@ def page_consultations(consultations, members, sales):
                                     "trainer": MY_NAME, "status": "Active", "goal": c.get("goal") or "다이어트 및 체형교정",
                                     "session_price": int(re_price), "branch": "개인 PT", "gender": c.get("gender", "여성"), "age": 28,
                                     "tr_expect": "확인중", "re_status": "미지정", "week_group": auto_week,
-                                    "memo": f"[신규상담 이관 메모]\n{c.get('memo','')}", 
-                                    "survey_json": json.dumps({"pain": c.get("memo",""), "exp": "신규 상담 후 전환 등록"}, ensure_ascii=False),
+                                    "memo": f"[신규상담 이관 메모]\n{edit_c_memo}", 
+                                    "survey_json": json.dumps({"pain": edit_c_memo, "exp": "신규 상담 후 전환 등록"}, ensure_ascii=False),
                                     "exp_re_sessions": 10, "exp_re_price": int(re_price), "is_exp_configured": 0
                                 }
                                 members = pd.concat([members, pd.DataFrame([new_m])], ignore_index=True)
@@ -1402,11 +1419,12 @@ def page_consultations(consultations, members, sales):
 
     # === [서브 탭 2: 기존 회원 재등록 주차별 관리] ===
     with main_m_tab2:
-        st.subheader("✏️ 기존 회원 주차별 재등록 예상가 및 AI 상담 스크립트 설정")
+        st.subheader("✏️ 기존 회원 주차별 재등록 예상가 및 1:1 메모/상담 케어")
         week_options_dynamic = ["전월이월"] + curr_weeks + ["노카테고리", "전월이탈"]
 
         inbody_df = st.session_state.get("inbody_df", fetch_table("inbody", INBODY_COLUMNS))
         logs_df = st.session_state.get("logs_df", fetch_table("logs", LOGS_COLUMNS))
+        sel_re_mem_id = st.session_state.get("selected_re_member_detail_id")
 
         for idx, m in members.iterrows():
             m_id = int(m["member_id"])
@@ -1440,9 +1458,14 @@ def page_consultations(consultations, members, sales):
             st.markdown('<div class="pt-card">', unsafe_allow_html=True)
             col_info, col_exp, col_re, col_wk = st.columns([2.2, 1.1, 1, 1])
 
+            # [개선] 이름 클릭 토글 방식 UI (회원 메모 및 모든 이력 바로 확인 가능)
             with col_info:
-                st.markdown(f"**{m['name']}** {gender_badge} &nbsp;&nbsp; 현 상태: {exp_badge_html}", unsafe_allow_html=True)
+                if st.button(f"👤 {m['name']}", key=f"btn_re_mname_{m_id}_{idx}"):
+                    st.session_state["selected_re_member_detail_id"] = None if sel_re_mem_id == m_id else m_id
+                    rerun()
+                st.markdown(f"{gender_badge} &nbsp;&nbsp; 현 상태: {exp_badge_html}", unsafe_allow_html=True)
                 st.markdown(f"<span style='font-size:13px; color:#64748B;'>연락처: {m['contact']} | 잔여: <b>{rem}회</b> {exp_text_disp}</span>", unsafe_allow_html=True)
+
             with col_exp:
                 n_exp = st.selectbox("TR 예상", TR_EXPECT_OPTIONS, index=idx_exp, key=f"re_exp_{m_id}")
             with col_re:
@@ -1450,7 +1473,19 @@ def page_consultations(consultations, members, sales):
             with col_wk:
                 n_wk = st.selectbox("주차 이동", week_options_dynamic, index=idx_wk, key=f"re_wk_{m_id}")
 
-            with st.expander(f"⚙️ '{m['name']}' 예상 재등록 회수/단가 수동 설정 & AI 상담 스크립트"):
+            # [이름 클릭 시 펼쳐지는 통합 회원 메모 & 수업 이력 & 상담 스크립트 서브 카드]
+            if sel_re_mem_id == m_id:
+                st.markdown("---")
+                st.markdown(f"##### 💬 '{m['name']}' 회원 특이사항 메모 작성 및 수정")
+                re_memo_val = st.text_area("회원 개별 메모", value=str(m.get("memo") or ""), key=f"ta_re_memo_{m_id}", height=80)
+                if st.button("💾 회원 메모 저장", key=f"btn_save_re_memo_{m_id}", type="primary"):
+                    members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "memo"] = str(re_memo_val)
+                    save_members(members)
+                    st.toast("회원 메모가 저장되었습니다.")
+                    rerun()
+
+                st.markdown("---")
+                st.markdown("##### ⚙️ 예상 재등록 회수/단가 수동 설정 및 AI 상담 브리핑")
                 ec1, ec2, ec3 = st.columns([2, 2, 1])
                 new_exp_s = ec1.selectbox("예상 재등록 세션", [10, 20, 30, 40, 50], index=[10, 20, 30, 40, 50].index(curr_exp_sess) if curr_exp_sess in [10, 20, 30, 40, 50] else 0, key=f"cfg_exp_s_{m_id}")
                 new_exp_p = ec2.number_input("예상 1회 단가(원)", min_value=10000, value=curr_exp_price, step=5000, key=f"cfg_exp_p_{m_id}")
@@ -1465,8 +1500,7 @@ def page_consultations(consultations, members, sales):
                     st.toast(f"'{m['name']}' 회원의 예상 재등록 금액 설정이 저장되었습니다.")
                     rerun()
 
-                st.markdown("---")
-
+                # AI 상담 스크립트
                 m_inbody = inbody_df[pd.to_numeric(inbody_df["member_id"], errors="coerce") == m_id].sort_values("date")
                 m_logs = logs_df[pd.to_numeric(logs_df["member_id"], errors="coerce") == m_id]
 
@@ -1507,6 +1541,20 @@ def page_consultations(consultations, members, sales):
 > 
 > 다음 **3-STEP STEP 2 (타겟 고립 및 근지구력 극대화) 단계**로 이어서 진행하신다면 현재 향상된 근력을 바탕으로 훨씬 완성도 높은 신체 라인을 구축하실 수 있습니다!"
                     """)
+
+                st.markdown("---")
+                st.markdown("##### 📜 지난 수업일지 이력 복기")
+                if m_logs.empty:
+                    st.caption("기록된 과거 수업일지가 없습니다.")
+                else:
+                    for _, l_re in m_logs.sort_values("date", ascending=False).iterrows():
+                        st.markdown(f"""
+                        <div style="background:#F8FAFC; border-left:4px solid {COLOR_BLUE}; border-radius:8px; padding:10px 14px; margin-bottom:6px;">
+                            <b>📅 {l_re['date']} ({l_re.get('start_time','-')} ~ {l_re.get('end_time','-')})</b><br/>
+                            <span style="font-size:13px; color:#334155;">✔ 잘한점: {l_re.get('good_points','-')}</span><br/>
+                            <span style="font-size:13px; color:#334155;">✔ 보완점: {l_re.get('improve_points','-')}</span>
+                        </div>
+                        """, unsafe_allow_html=True)
 
             if n_exp != TR_EXPECT_OPTIONS[idx_exp] or n_re != RE_STATUS_OPTIONS[idx_re] or n_wk != week_options_dynamic[idx_wk]:
                 members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, ["tr_expect", "re_status", "week_group"]] = [n_exp, n_re, n_wk]
@@ -1872,8 +1920,8 @@ def page_journal(members, logs):
                 st.markdown(f"""
                 <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:10px; padding:12px 16px; margin-bottom:8px;">
                     <div style="font-weight:800; color:{COLOR_BLUE}; font-size:14px;">📅 {l_row['date']} ({l_row.get('start_time','-')} ~ {l_row.get('end_time','-')})</div>
-                    <div style="font-size:13px; color:#334155; margin-top:4px;"><b>✔ 잘한점:</b> {l_row.get('good_points','-')}</div>
-                    <div style="font-size:13px; color:#334155; margin-top:2px;"><b>✔ 보완점:</b> {l_row.get('improve_points','-')}</div>
+                    <div style="font-size:13px; color:#334155;"><b>✔ 잘한점:</b> {l_row.get('good_points','-')}</div>
+                    <div style="font-size:13px; color:#334155;"><b>✔ 보완점:</b> {l_row.get('improve_points','-')}</div>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -2326,7 +2374,7 @@ def page_inbody(members, inbody):
         fig.add_trace(go.Scatter(x=m_inbody["date"], y=m_inbody["body_fat_pct"], mode='lines+markers', name='체지방률 (%)', line=dict(color='#E11D48', width=3)))
 
         fig.update_layout(
-            height=350, margin=dict(l=10, r=10, t=20, b=10),
+            height=350, margin=dict(l=10, r=10, t=10, b=10),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
             plot_bgcolor="#FFFFFF", paper_bgcolor="#FFFFFF"
         )
