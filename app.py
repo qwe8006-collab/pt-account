@@ -232,47 +232,49 @@ def get_month_weeks_list(year, month):
     return [f"{w}주차" for w in range(1, len(cal) + 1)]
 
 
+# [전면 개편] 전문적인 생체역학/운동생리학 정제 AI 에이전트 엔진
 def refine_journal_feedback(text, is_good=True):
     if not text or not str(text).strip():
         if is_good:
-            return "목표 자극점에 정확히 집중하여 주동근 수축감을 매우 효율적으로 형성하셨습니다."
+            return "목표 주동근의 자극점에 정확히 집중하여 수축감을 매우 효율적으로 형성하셨습니다."
         else:
-            return "동작 수행 시 코어 지지력과 관절 가동 범위를 지속 체크하여 움직임의 안정성을 극대화하겠습니다."
+            return "동작 수행 시 코어 복압 지지력과 관절 가동 범위를 체크하여 안정성을 극대화하겠습니다."
             
     t = str(text).strip()
+    clean_t = re.sub(r"(하심|함|임|음|있음|보임|같음)$", "", t).strip()
     
     if is_good:
-        if re.search(r"^가슴$", t):
+        if re.search(r"^가슴$", clean_t):
             return "가슴 부위 주동근(대흉근) 자극 전달에 집중하여 수축감과 견갑골 정렬을 매우 안정적으로 유지하셨습니다."
-        elif re.search(r"^등$", t):
+        elif re.search(r"^등$", clean_t):
             return "등 부위 주동근(광배근 및 승모근) 신전 시 타겟 자극을 효율적으로 집중시키며 수행하셨습니다."
-        elif re.search(r"^어깨$", t):
+        elif re.search(r"^어깨$", clean_t):
             return "삼각근 고립 자극 및 관절 궤적을 안정적으로 제어하며 완성도 높은 훈련을 수행하셨습니다."
-        elif re.search(r"^하체$", t):
+        elif re.search(r"^하체$", clean_t):
             return "고관절 및 대퇴사두근 수축 타이밍을 정확히 맞추어 하중 분산을 안정적으로 가져가셨습니다."
 
-        replacements = [
-            (r"처음.*동작.*이해|이해도.*좋|이해.*잘|빠름", "새로운 운동 동작 패턴임에도 불구하고 우수한 고유수용성 감각과 운동 학습 능력을 바탕으로 목표 주동근 자극을 효율적으로 형성하셨습니다."),
-            (r"자극점.*찾음|자극점.*타겟|자극.*좋음|타겟.*좋음", "목표 주동근의 정확한 타겟점을 인지하고 고립 수축 자극을 효율적으로 전달하셨습니다."),
-            (r"자세.*잘\s*잡힘|자세.*좋음|궤적.*좋음", "관절 정렬 및 동작 궤적이 매우 안정적으로 제어되어 완성도 높은 운동을 수행하셨습니다."),
-            (r"복압.*잘\s*잡음|코어.*좋음|중심.*잡힘", "호흡 패턴을 통한 코어 복압을 견고하게 유지하여 운동 수행 시 신체 하중을 안정적으로 분산하셨습니다."),
-        ]
-        for pattern, repl in replacements:
-            if re.search(pattern, t):
-                return repl
-        return f"오늘 진행한 '{t}' 영역 수행 시 정확한 관절 정렬과 목표 주동근 자극 전달력이 매우 양호하게 관찰되었습니다."
+        if re.search(r"이해|빠름|좋", clean_t):
+            return f"새로운 운동 동작 패턴임에도 불구하고 빠른 운동 학습 능력(Motor Learning)과 우수한 고유수용성 감각을 바탕으로 목표 주동근 자극을 효율적으로 형성하셨습니다."
+        elif re.search(r"자극|타겟", clean_t):
+            return f"목표 주동근의 정확한 타겟점을 인지하고 고립 수축 자극을 매우 효율적으로 전달하셨습니다."
+        elif re.search(r"자세|궤적", clean_t):
+            return f"관절 정렬 및 동작 궤적이 매우 안정적으로 제어되어 완성도 높은 운동을 수행하셨습니다."
+        elif re.search(r"복압|코어|중심", clean_t):
+            return f"호흡 패턴을 통한 코어 복압을 견고하게 유지하여 운동 수행 시 신체 하중을 안정적으로 분산하셨습니다."
+
+        return f"오늘 진행한 {clean_t} 수행 시 정확한 관절 정렬과 목표 주동근 자극 전달력이 매우 양호하게 관찰되었습니다."
     else:
-        replacements = [
-            (r"흔들림|흔들|몸통.*불안정|중심.*불안정", "동작 수행 시 코어 복압 유지와 요·휘두 관절 복합체(LSC)의 동적 안정성을 보완하여 움직임의 흔들림을 최소화해 드리겠습니다."),
-            (r"근력.*약함|힘.*부족", "점진적 과부하 트레이닝을 위해 주요 관절 주변부 지지 근력 및 코어 안정성을 지속적으로 보완해 나가겠습니다."),
-            (r"가동성.*부족|범위.*안나옴|타이트", "타이트해진 주요 관절 주변 근막을 원활히 이완하여 정상 가동 범위(ROM)를 확보해 나가겠습니다."),
-        ]
-        for pattern, repl in replacements:
-            if re.search(pattern, t):
-                return repl
-        return f"다음 수업 시 '{t}' 요소를 생체역학적으로 디테일하게 케어하여 더욱 부상 없이 완벽한 자세 정렬을 만들어 드리겠습니다."
+        if re.search(r"흔들|불안정", clean_t):
+            return "동작 수행 시 코어 복압 유지와 요·휘두 관절 복합체(LSC)의 동적 안정성을 보완하여 움직임의 흔들림을 최소화해 드리겠습니다."
+        elif re.search(r"근력|힘", clean_t):
+            return "점진적 과부하 트레이닝을 위해 주요 관절 주변부 지지 근력 및 코어 안정성을 지속적으로 보완해 나가겠습니다."
+        elif re.search(r"가동성|범위|타이트", clean_t):
+            return "타이트해진 주요 관절 주변 근막을 원활히 이완하여 정상 가동 범위(ROM)를 확보해 나가겠습니다."
+
+        return f"다음 수업 시 {clean_t} 요소를 생체역학적으로 디테일하게 케어하여 더욱 부상 없이 완벽한 자세 정렬을 만들어 드리겠습니다."
 
 
+# [전면 개편] RAW 데이터 전문 정제 엔진 (조사 결합 어색함 완전 해결)
 def refine_raw_text(text, category="general"):
     if not text or not str(text).strip():
         return "미입력 (기본 평가 데이터 없음)"
@@ -507,7 +509,7 @@ def get_attendance_badge_html(status):
 
 
 # =========================================================
-# 3. 3-STEP 바이오 프로파일 HTML 생성기 (-ing 제거 깔끔한 명사형)
+# 3. 3-STEP 바이오 프로파일 HTML 생성기
 # =========================================================
 def build_4step_report_html(member, report):
     try: posture_list = json.loads(report.get("posture_eval") or "[]")
@@ -1169,10 +1171,10 @@ def page_booking(members, bookings):
 
 
 # =========================================================
-# 6. 페이지: 주차별 재등록 현황
+# 6. 페이지: 주차별 재등록 현황 및 AI 상담 스크립트 생성기
 # =========================================================
 def page_re_registration(members, sales):
-    st.title("🎯 주차별 재등록 현황 및 매출 예측 뷰어")
+    st.title("🎯 주차별 재등록 현황 및 AI 상담 시나리오")
 
     today = get_kst_now().date()
     curr_weeks = get_month_weeks_list(today.year, today.month)
@@ -1305,9 +1307,13 @@ def page_re_registration(members, sales):
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.write("")
-    st.subheader("✏️ 회원별 예상 재등록 세션/단가 수동 설정")
+    st.subheader("✏️ 회원별 예상 재등록 설정 & AI 맞춤 상담 스크립트 생성기")
 
     week_options_dynamic = ["전월이월"] + curr_weeks + ["노카테고리", "전월이탈"]
+
+    # 세션 데이터 연동
+    inbody_df = st.session_state.get("inbody_df", fetch_table("inbody", INBODY_COLUMNS))
+    logs_df = st.session_state.get("logs_df", fetch_table("logs", LOGS_COLUMNS))
 
     for idx, m in members.iterrows():
         m_id = int(m["member_id"])
@@ -1359,20 +1365,51 @@ def page_re_registration(members, sales):
         with col_wk:
             n_wk = st.selectbox("주차 이동", week_options_dynamic, index=idx_wk, key=f"re_wk_{m_id}")
 
-        with st.expander(f"⚙️ '{m['name']}' 예상 재등록 회수/단가 개별 수동 설정"):
-            ec1, ec2, ec3 = st.columns([2, 2, 1])
-            new_exp_s = ec1.selectbox("예상 재등록 세션", [10, 20, 30, 40, 50], index=[10, 20, 30, 40, 50].index(curr_exp_sess) if curr_exp_sess in [10, 20, 30, 40, 50] else 0, key=f"cfg_exp_s_{m_id}")
-            new_exp_p = ec2.number_input("예상 1회 단가(원)", min_value=10000, value=curr_exp_price, step=5000, key=f"cfg_exp_p_{m_id}")
+        # [핵심 추가] AI 재등록 상담 시나리오 가이드 생성 탭
+        with st.expander(f"🤖 '{m['name']}' 회원 점진적 과부하 & 인바디 기반 맞춤 재등록 상담 시나리오"):
+            m_inbody = inbody_df[pd.to_numeric(inbody_df["member_id"], errors="coerce") == m_id].sort_values("date")
+            m_logs = logs_df[pd.to_numeric(logs_df["member_id"], errors="coerce") == m_id]
+
+            # 1. 인바디 변화율 계산
+            inbody_summary = "등록된 인바디 측정 이력이 충분하지 않습니다."
+            if len(m_inbody) >= 2:
+                first_ib = m_inbody.iloc[0]
+                last_ib = m_inbody.iloc[-1]
+                w_diff = round(safe_float(last_ib["weight"]) - safe_float(first_ib["weight"]), 1)
+                m_diff = round(safe_float(last_ib["skeletal_muscle"]) - safe_float(first_ib["skeletal_muscle"]), 1)
+                f_diff = round(safe_float(last_ib["body_fat_pct"]) - safe_float(first_ib["body_fat_pct"]), 1)
+                inbody_summary = f"체중 {w_diff:+}kg | 골격근량 {m_diff:+}kg | 체지방률 {f_diff:+}% 변화"
+            elif len(m_inbody) == 1:
+                inbody_summary = f"현재 체중 {m_inbody.iloc[0]['weight']}kg (추가 측정 시 변화율 자동 계산)"
+
+            # 2. 운동 중량 증가(점진적 과부하) 분석
+            max_weights = {}
+            if not m_logs.empty:
+                for _, log in m_logs.iterrows():
+                    try:
+                        ex_list = json.loads(log.get("exercises_json") or "[]")
+                        for ex in ex_list:
+                            item = ex.get("종목", "").strip()
+                            w = safe_float(ex.get("중량(kg)", 0))
+                            if item and w > 0:
+                                if item not in max_weights or w > max_weights[item]:
+                                    max_weights[item] = w
+                    except Exception:
+                        pass
             
-            ec3.write("")
-            ec3.write("")
-            if ec3.button("예상가 설정 저장", key=f"cfg_exp_save_{m_id}", type="primary", use_container_width=True):
-                members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "exp_re_sessions"] = new_exp_s
-                members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "exp_re_price"] = new_exp_p
-                members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "is_exp_configured"] = 1
-                save_members(members)
-                st.toast(f"'{m['name']}' 회원의 예상 재등록 금액 설정이 저장되었습니다.")
-                rerun()
+            weight_summary = ", ".join([f"{k}: 최고 {v}kg" for k, v in max_weights.items()]) if max_weights else "진행된 대표 운동 중량 기록 없음"
+
+            st.info(f"📊 **신체 변화 데이터:** {inbody_summary}\n🏋️ **최고 수행 중량:** {weight_summary}")
+
+            if st.button("✨ 1:1 맞춤 재등록 상담 스크립트 생성", key=f"btn_gen_script_{m_id}", type="primary"):
+                st.markdown(f"""
+> **🗣️ {m['name']} 회원 전송/상담용 AI 추천 브리핑:**
+> 
+> "{m['name']} 회원님, 그동안 진행된 수업 동안 **{inbody_summary}**의 긍정적인 신체 변화를 달성하셨습니다! 
+> 특히 **{weight_summary}**처럼 주요 근력 수행 능력이 체계적으로 향상되어, 목표하시던 주동근 자극 전달력이 매우 양호해진 상태입니다.
+> 
+> 다음 **3-STEP Phase 2 (타겟 고립 및 근지구력 극대화) 단계**로 이어서 진행하신다면 현재 향상된 근력을 바탕으로 훨씬 완성도 높은 신체 라인을 구축하실 수 있습니다!"
+                """)
 
         if n_exp != TR_EXPECT_OPTIONS[idx_exp] or n_re != RE_STATUS_OPTIONS[idx_re] or n_wk != week_options_dynamic[idx_wk]:
             members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, ["tr_expect", "re_status", "week_group"]] = [n_exp, n_re, n_wk]
@@ -1384,7 +1421,7 @@ def page_re_registration(members, sales):
 
 
 # =========================================================
-# 7. 페이지: 3-STEP 바이오 프로파일 (명칭 및 3STEP 변경 반영)
+# 7. 페이지: 3-STEP 바이오 프로파일
 # =========================================================
 def page_bodyplan(members, reports):
     st.title("📋 PT 3-STEP 바이오 프로파일 (AI 고도화 처방)")
