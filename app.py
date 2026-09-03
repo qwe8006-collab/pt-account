@@ -328,7 +328,6 @@ def refine_raw_text(text, category="general"):
     return clean_t
 
 
-# 헬퍼: 가능성 뱃지 HTML 반환
 def get_expect_badge_html(status_str):
     st_val = str(status_str).strip()
     if st_val == "높음":
@@ -1126,7 +1125,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
 
 # =========================================================
-# 5. 페이지: 통합 신규 상담 & 재등록 파이프라인 관리 탭
+# 5. 페이지: 통합 신규 상담 & 재등록 파이프라인 관리 탭 (예상 매출 합계 요약 포함)
 # =========================================================
 def page_consultations(consultations, members, sales):
     st.title("💡 신규 상담 & 재등록 파이프라인 관리")
@@ -1134,7 +1133,67 @@ def page_consultations(consultations, members, sales):
     today = get_kst_now().date()
     curr_weeks = get_month_weeks_list(today.year, today.month)
 
-    # 1. 상단 분석 차트 탭 (신규 추이 차트 & 기존 재등록 파이프라인 차트 통합)
+    # 1. 신규 상담 예상 매출 합계 계산 (미전환건 중 높음 100%, 중간 50% 반영)
+    unconverted_consults = consultations[consultations["converted"] != True]
+    c_high_cnt = len(unconverted_consults[unconverted_consults["expect_status"] == "높음"])
+    c_mid_cnt = len(unconverted_consults[unconverted_consults["expect_status"] == "중간"])
+    
+    # 신규 상담 기본 예상 금액 세팅 (10회 70만원 = 700,000원 기준)
+    consult_pipeline_amount = (c_high_cnt * 700000) + int(c_mid_cnt * 700000 * 0.5)
+
+    # 2. 기존 회원 재등록 예상 매출 합계 계산
+    re_pipeline_amount = 0
+    re_high_amount = 0
+    re_mid_amount = 0
+
+    chart_data_tr = []
+    for r in curr_weeks:
+        sub = members[members["week_group"] == r]
+        sub_exp_amounts = []
+        for _, sm in sub.iterrows():
+            tr_exp = str(sm.get("tr_expect", "")).strip()
+            re_st = str(sm.get("re_status", "")).strip()
+            is_cfg = bool(safe_int(sm.get("is_exp_configured"), 0) == 1)
+
+            if tr_exp in ["이탈", "낮음"] or re_st in ["이탈", "전월이탈"] or not is_cfg:
+                calc_amt = 0
+            else:
+                e_sess = safe_int(sm.get("exp_re_sessions"), 10)
+                e_price = safe_int(sm.get("exp_re_price"), safe_int(sm.get("session_price"), 70000))
+                calc_amt = e_sess * e_price
+            sub_exp_amounts.append(calc_amt)
+        
+        sub["calc_exp_amt"] = sub_exp_amounts
+        c_tr_high = len(sub[sub["tr_expect"] == "높음"])
+        c_tr_mid = len(sub[sub["tr_expect"] == "중간"])
+        c_tr_low = len(sub[(sub["tr_expect"] == "낮음") | (sub["tr_expect"] == "이탈")])
+        c_tr_check = len(sub[sub["tr_expect"] == "확인중"])
+
+        week_tr_sum_amount = sub["calc_exp_amt"].sum() if not sub.empty else 0
+        re_pipeline_amount += week_tr_sum_amount
+
+        high_sum = sub[sub["tr_expect"] == "높음"]["calc_exp_amt"].sum() if not sub.empty else 0
+        mid_sum = sub[sub["tr_expect"] == "중간"]["calc_exp_amt"].sum() if not sub.empty else 0
+        re_high_amount += high_sum
+        re_mid_amount += mid_sum
+
+        chart_data_tr.append({
+            "주차": r, "🟢 높음": c_tr_high, "🟡 중간": c_tr_mid, "🔴 낮음/이탈": c_tr_low, "❔ 확인중": c_tr_check, "예상 매출액(원)": week_tr_sum_amount
+        })
+
+    df_tr = pd.DataFrame(chart_data_tr)
+
+    # [핵심 추가] 각 탭별 예상 매출액 합계 요약 카운터
+    st.markdown("##### 💡 당월 파이프라인 통합 예상 매출액 요약")
+    p_col1, p_col2, p_col3, p_col4 = st.columns(4)
+    p_col1.metric("💡 신규 상담 예상 매출", f"{consult_pipeline_amount:,.0f}원")
+    p_col2.metric("🎯 재등록 총 예상 매출", f"{re_pipeline_amount:,.0f}원")
+    p_col3.metric("🟢 재등록 확정형(높음)", f"{re_high_amount:,.0f}원")
+    p_col4.metric("🟡 재등록 가능형(중간 50%)", f"{int(re_mid_amount * 0.5):,.0f}원")
+
+    st.write("")
+
+    # 상단 분석 차트 탭
     st.markdown('<div class="pt-card">', unsafe_allow_html=True)
     st.subheader(f"📊 {today.year}년 {today.month}월 상담 & 재등록 파이프라인 동향")
     
@@ -1172,48 +1231,6 @@ def page_consultations(consultations, members, sales):
                 st.markdown("<div style='padding-top:20px;'></div>", unsafe_allow_html=True)
                 st.metric("총 상담 누적 모수", f"{len(consultations)}명")
                 st.metric("🟢 회원 등록 전환 완료", f"{c_converted}명")
-
-    # 기존 재등록 차트 데이터 계산
-    chart_data_tr = []
-    chart_data_st = []
-    tot_pipeline_amount = 0
-    tot_high_amount = 0
-    tot_mid_amount = 0
-
-    for r in curr_weeks:
-        sub = members[members["week_group"] == r]
-        sub_exp_amounts = []
-        for _, sm in sub.iterrows():
-            tr_exp = str(sm.get("tr_expect", "")).strip()
-            re_st = str(sm.get("re_status", "")).strip()
-            is_cfg = bool(safe_int(sm.get("is_exp_configured"), 0) == 1)
-
-            if tr_exp in ["이탈", "낮음"] or re_st in ["이탈", "전월이탈"] or not is_cfg:
-                calc_amt = 0
-            else:
-                e_sess = safe_int(sm.get("exp_re_sessions"), 10)
-                e_price = safe_int(sm.get("exp_re_price"), safe_int(sm.get("session_price"), 70000))
-                calc_amt = e_sess * e_price
-            sub_exp_amounts.append(calc_amt)
-        
-        sub["calc_exp_amt"] = sub_exp_amounts
-        c_tr_high = len(sub[sub["tr_expect"] == "높음"])
-        c_tr_mid = len(sub[sub["tr_expect"] == "중간"])
-        c_tr_low = len(sub[(sub["tr_expect"] == "낮음") | (sub["tr_expect"] == "이탈")])
-        c_tr_check = len(sub[sub["tr_expect"] == "확인중"])
-
-        week_tr_sum_amount = sub["calc_exp_amt"].sum() if not sub.empty else 0
-        tot_pipeline_amount += week_tr_sum_amount
-        high_sum = sub[sub["tr_expect"] == "높음"]["calc_exp_amt"].sum() if not sub.empty else 0
-        mid_sum = sub[sub["tr_expect"] == "중간"]["calc_exp_amt"].sum() if not sub.empty else 0
-        tot_high_amount += high_sum
-        tot_mid_amount += mid_sum
-
-        chart_data_tr.append({
-            "주차": r, "🟢 높음": c_tr_high, "🟡 중간": c_tr_mid, "🔴 낮음/이탈": c_tr_low, "❔ 확인중": c_tr_check, "예상 매출액(원)": week_tr_sum_amount
-        })
-
-    df_tr = pd.DataFrame(chart_data_tr)
 
     with chart_tab2:
         fig1 = go.Figure()
@@ -2030,19 +2047,16 @@ def page_members(members, sales, bookings, logs, reports):
             with c_del:
                 st.write("")
                 if st.button("🗑️", key=f"btn_del_mem_{m_id}_{idx}", use_container_width=True):
-                    # 1. DB 완전 삭제
                     for tbl in ["bookings", "logs", "reports", "inbody", "sales", "members"]:
                         supabase.table(tbl).delete().eq("member_id", m_id).execute()
                         supabase.table(tbl).delete().eq("member_id", str(m_id)).execute()
 
-                    # 2. [양방향 동기화] 상담 탭에 동일 고객 존재 시 '회원 등록 완료' ➡️ '상담 진행중'으로 복구
                     consults_df = st.session_state.get("consultations_df", fetch_table("consultations", CONSULTATIONS_COLUMNS))
                     c_mask = (consults_df["name"].astype(str).str.strip() == m_name) & (consults_df["contact"].astype(str).str.strip() == m_contact)
                     if c_mask.any():
                         consults_df.loc[c_mask, "converted"] = False
                         save_consultations(consults_df)
 
-                    # 3. 세션 상태 캐시 완전 동기화
                     if "bookings_df" in st.session_state:
                         st.session_state["bookings_df"] = st.session_state["bookings_df"][st.session_state["bookings_df"]["member_id"].astype(str) != str(m_id)]
                     if "logs_df" in st.session_state:
