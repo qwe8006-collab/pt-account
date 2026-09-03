@@ -449,7 +449,6 @@ def next_id(df, id_col):
     return int(pd.to_numeric(df[id_col], errors="coerce").fillna(0).max()) + 1
 
 
-# [완벽 고도화] 동종 운동 자동 추적 점진적 과부하(PR) 감지기
 def generate_friendly_message_from_data(member_id, member_name, rem_sessions, exercises_df, good, improve):
     ex_summary = []
     weight_increases = []
@@ -457,7 +456,6 @@ def generate_friendly_message_from_data(member_id, member_name, rem_sessions, ex
     logs_df = st.session_state.get("logs_df", fetch_table("logs", LOGS_COLUMNS))
     m_past_logs = logs_df[pd.to_numeric(logs_df["member_id"], errors="coerce") == int(member_id)]
 
-    # 과거 해당 회원의 종목별 최고 수행 중량 맵 생성
     past_max_weights = {}
     if not m_past_logs.empty:
         for _, plog in m_past_logs.iterrows():
@@ -481,7 +479,6 @@ def generate_friendly_message_from_data(member_id, member_name, rem_sessions, ex
                 s = int(safe_float(row.get("세트", 0)))
                 ex_summary.append(f"  • {item}: {w}kg x {c}회 x {s}세트")
 
-                # 동일 종목의 과거 최고 중량 대비 오늘 중량이 커졌을 때만 감지
                 if item in past_max_weights:
                     prev_w = past_max_weights[item]
                     if w > prev_w:
@@ -1894,8 +1891,6 @@ def page_members(members, sales, bookings, logs, reports):
                     members = members[members["member_id"].astype(str) != str(m_id)]
                     save_members(members)
 
-                    if selected_detail_id == m_id:
-                        st.session_state["selected_detail_member_id"] = None
                     st.toast(f"'{m['name']}' 회원의 모든 데이터가 완전 삭제되었습니다.")
                     rerun()
 
@@ -2052,7 +2047,7 @@ def page_members(members, sales, bookings, logs, reports):
 
 
 # =========================================================
-# 10. 인바디 체성분 관리 (이전 측정값 대비 변화 및 AI 정밀 분석)
+# 10. 인바디 체성분 관리 (최초 및 직전 대비 듀얼 분석)
 # =========================================================
 def page_inbody(members, inbody):
     st.title("📉 인바디(InBody) 체성분 기록 & 변화 분석")
@@ -2098,40 +2093,53 @@ def page_inbody(members, inbody):
     if m_inbody.empty:
         st.info(f"'{selected_m['name']}' 회원의 인바디 측정 기록이 없습니다.")
     else:
-        # [핵심 추가] 이전 기록 대비 변화량 분석 및 AI 피드백 브리핑
+        first_rec = m_inbody.iloc[0]
+        curr_rec = m_inbody.iloc[-1]
+        
+        # 최초 대비 (Total)
+        tot_w_diff = round(safe_float(curr_rec["weight"]) - safe_float(first_rec["weight"]), 1)
+        tot_m_diff = round(safe_float(curr_rec["skeletal_muscle"]) - safe_float(first_rec["skeletal_muscle"]), 1)
+        tot_f_diff = round(safe_float(curr_rec["body_fat_pct"]) - safe_float(first_rec["body_fat_pct"]), 1)
+
+        st.markdown('<div class="pt-card" style="border-left: 5px solid #2563EB; background:#EFF6FF;">', unsafe_allow_html=True)
+        st.markdown(f"##### 📊 **'{selected_m['name']}' 회원의 체성분 입체 분석 리포트**")
+
+        # 1. 최초 측정 대비 누적 변화량 (Total)
+        st.markdown(f"🚩 **최초 측정({first_rec['date']}) 대비 누적 변화 (Total):**")
+        tc_w, tc_m, tc_f = st.columns(3)
+        tc_w.metric("총 체중 변화", f"{curr_rec['weight']} kg", f"{tot_w_diff:+} kg", delta_color="inverse")
+        tc_m.metric("총 골격근량 변화", f"{curr_rec['skeletal_muscle']} kg", f"{tot_m_diff:+} kg")
+        tc_f.metric("총 체지방률 변화", f"{curr_rec['body_fat_pct']} %", f"{tot_f_diff:+} %", delta_color="inverse")
+
+        # 2. 직전 측정 대비 최근 변화량 (Recent)
         if len(m_inbody) >= 2:
             prev_rec = m_inbody.iloc[-2]
-            curr_rec = m_inbody.iloc[-1]
+            rec_w_diff = round(safe_float(curr_rec["weight"]) - safe_float(prev_rec["weight"]), 1)
+            rec_m_diff = round(safe_float(curr_rec["skeletal_muscle"]) - safe_float(prev_rec["skeletal_muscle"]), 1)
+            rec_f_diff = round(safe_float(curr_rec["body_fat_pct"]) - safe_float(prev_rec["body_fat_pct"]), 1)
 
-            w_diff = round(safe_float(curr_rec["weight"]) - safe_float(prev_rec["weight"]), 1)
-            m_diff = round(safe_float(curr_rec["skeletal_muscle"]) - safe_float(prev_rec["skeletal_muscle"]), 1)
-            f_diff = round(safe_float(curr_rec["body_fat_pct"]) - safe_float(prev_rec["body_fat_pct"]), 1)
-
-            st.markdown('<div class="pt-card" style="border-left: 5px solid #2563EB; background:#EFF6FF;">', unsafe_allow_html=True)
-            st.markdown(f"##### 📊 **'{selected_m['name']}' 회원의 직전 측정({prev_rec['date']}) 대비 변화량 및 AI 분석**")
-            
-            c_w, c_m, c_f = st.columns(3)
-            c_w.metric("체중 변화", f"{curr_rec['weight']} kg", f"{w_diff:+} kg", delta_color="inverse")
-            c_m.metric("골격근량 변화", f"{curr_rec['skeletal_muscle']} kg", f"{m_diff:+} kg")
-            c_f.metric("체지방률 변화", f"{curr_rec['body_fat_pct']} %", f"{f_diff:+} %", delta_color="inverse")
+            st.markdown("---")
+            st.markdown(f"⚡ **직전 측정({prev_rec['date']}) 대비 최근 변화 (Recent):**")
+            rc_w, rc_m, rc_f = st.columns(3)
+            rc_w.metric("최근 체중 변화", f"{curr_rec['weight']} kg", f"{rec_w_diff:+} kg", delta_color="inverse")
+            rc_m.metric("최근 골격근량 변화", f"{curr_rec['skeletal_muscle']} kg", f"{rec_m_diff:+} kg")
+            rc_f.metric("최근 체지방률 변화", f"{curr_rec['body_fat_pct']} %", f"{rec_f_diff:+} %", delta_color="inverse")
 
             # 맞춤 분석 코멘트 자동 생성
             feedback_comments = []
-            if m_diff > 0 and f_diff < 0:
-                feedback_comments.append("🔥 **우수한 체성분 개선:** 골격근량이 증가하면서 체지방률이 감량되어 대사 효율과 신체 밸런스가 매우 이상적으로 발전하고 있습니다!")
-            elif m_diff > 0:
-                feedback_comments.append("💪 **근력 및 골격근 발달:** 골격근량이 순조롭게 증가 중입니다. 현 루틴의 부하 과부하 세팅이 효과적으로 작용하고 있습니다.")
-            elif f_diff < 0:
-                feedback_comments.append("📉 **체지방 감량 호조:** 체지방 감소 추세가 매우 양호합니다. 현재의 영양 및 유산소 훈련 비중을 유지해 주세요.")
-
-            if m_diff < 0:
-                feedback_comments.append("⚠️ **근손실 주의 보완점:** 골격근량이 일시적으로 소폭 감소했습니다. 단백질 섭취량과 점진적 부하 훈련 세팅을 강화할 필요가 있습니다.")
-            if f_diff > 0:
-                feedback_comments.append("💡 **식단 케어 보완점:** 체지방률이 소폭 상승했습니다. 주말 식습관 및 수면/스트레스 관리를 함께 체크해 드리겠습니다.")
+            if tot_m_diff > 0 and tot_f_diff < 0:
+                feedback_comments.append(f"🔥 **누적 우수 성과:** 등록 후 총 골격근량 {tot_m_diff:+}kg 증가, 체지방률 {tot_f_diff:+}% 감량되어 완벽한 신체 리커버리 상태를 보여주고 있습니다!")
+            if rec_m_diff > 0 and rec_f_diff < 0:
+                feedback_comments.append(f"💪 **최근 가속화:** 직전 대비 근육량 {rec_m_diff:+}kg 상승 및 체지방 {rec_f_diff:+}% 감량으로 최적의 훈련 이행률을 달성 중입니다.")
+            elif rec_m_diff < 0:
+                feedback_comments.append("⚠️ **최근 근손실 주의 보완점:** 직전 대비 골격근량이 소폭 감소했습니다. 단백질 섭취량과 점진적 부하 훈련 세팅을 강화할 필요가 있습니다.")
+            elif rec_f_diff > 0:
+                feedback_comments.append("💡 **최근 식단 케어 보완점:** 직전 대비 체지방률이 소폭 상승했습니다. 주말 식습관 및 수면/스트레스 관리를 함께 체크해 드리겠습니다.")
 
             comment_disp = "\n\n".join(feedback_comments) if feedback_comments else "현재 체성분 수치가 안정적으로 유지되고 있습니다."
-            st.markdown(f"<div style='margin-top:10px; font-size:14px; color:#1E293B;'>{comment_disp}</div>", unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown(f"<div style='margin-top:12px; font-size:14px; color:#1E293B;'>{comment_disp}</div>", unsafe_allow_html=True)
+
+        st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown('<div class="pt-card">', unsafe_allow_html=True)
         st.subheader(f"📈 '{selected_m['name']}' 회원 체성분 변화 추이 그래프")
