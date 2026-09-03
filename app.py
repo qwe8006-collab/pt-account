@@ -156,6 +156,7 @@ REPORTS_COLUMNS = [
     "func_eval", "phase1_text", "phase2_text", "phase3_text", "trainer_comment", "status", "delivered"
 ]
 BOOKINGS_COLUMNS = ["booking_id", "member_id", "date", "time_slot", "status"]
+CONSULTATIONS_COLUMNS = ["consult_id", "date", "name", "contact", "gender", "goal", "source", "expect_status", "memo", "converted"]
 
 STATUS_OPTIONS = ["Active", "Hold", "Expired"]
 TR_EXPECT_OPTIONS = ["높음", "중간", "낮음", "이탈", "확인중"]
@@ -285,15 +286,13 @@ def refine_journal_feedback(text, is_good=True):
         return f"다음 수업 시 {clean_t} 요소를 생체역학적으로 디테일하게 케어하여 더욱 부상 없이 완벽한 자세 정렬을 만들어 드리겠습니다."
 
 
-# [최고 레벨 AI 전문 정제 에이전트] 어미 탈곡 및 완벽한 문장 조합 엔진
 def refine_raw_text(text, category="general"):
     if not text or not str(text).strip():
         return "미입력 (기본 평가 데이터 없음)"
     
     t = str(text).strip()
-    # 존칭 및 불필요한 어미 완벽 탈곡 (~하심, ~있으심, ~패턴가 등)
     clean_t = re.sub(r"(이|가)?\s*(닫혀있으심|닫힘|약하심|약함|부족함|약|하심|있으심|있음|보임|같음|패턴가|패턴이)$", "", t).strip()
-    clean_t = re.sub(r"\s+", " ", clean_t) # 중복 공백 제거
+    clean_t = re.sub(r"\s+", " ", clean_t)
 
     if category == "goal":
         if re.search(r"벌크업|근육증량|근성장", clean_t):
@@ -351,6 +350,7 @@ def get_cached_data():
     if "sales_df" not in st.session_state: st.session_state["sales_df"] = fetch_table("sales", SALES_COLUMNS)
     if "reports_df" not in st.session_state: st.session_state["reports_df"] = fetch_table("reports", REPORTS_COLUMNS)
     if "bookings_df" not in st.session_state: st.session_state["bookings_df"] = fetch_table("bookings", BOOKINGS_COLUMNS)
+    if "consultations_df" not in st.session_state: st.session_state["consultations_df"] = fetch_table("consultations", CONSULTATIONS_COLUMNS)
 
     return (
         st.session_state["members_df"],
@@ -358,15 +358,16 @@ def get_cached_data():
         st.session_state["inbody_df"],
         st.session_state["sales_df"],
         st.session_state["reports_df"],
-        st.session_state["bookings_df"]
+        st.session_state["bookings_df"],
+        st.session_state["consultations_df"]
     )
 
 def save_data_safe(table_name, df):
     if df.empty: return True
     data = df.to_dict(orient="records")
-    int_fields = ["member_id", "log_id", "record_id", "sale_id", "report_id", "booking_id", "total_sessions", "remaining_sessions", "session_price", "age", "exp_re_sessions", "exp_re_price", "is_exp_configured", "amount"]
+    int_fields = ["member_id", "log_id", "record_id", "sale_id", "report_id", "booking_id", "consult_id", "total_sessions", "remaining_sessions", "session_price", "age", "exp_re_sessions", "exp_re_price", "is_exp_configured", "amount"]
     float_fields = ["weight", "skeletal_muscle", "body_fat_pct"]
-    bool_fields = ["sent", "delivered"]
+    bool_fields = ["sent", "delivered", "converted"]
 
     clean_batch = []
     for row in data:
@@ -409,6 +410,10 @@ def save_reports(df):
 def save_bookings(df): 
     st.session_state["bookings_df"] = df
     return save_data_safe("bookings", df)
+
+def save_consultations(df):
+    st.session_state["consultations_df"] = df
+    return save_data_safe("consultations", df)
 
 def update_attendance_log_and_session(member_id, date_str, start_time_str, end_time_str, new_att_val):
     try:
@@ -1108,6 +1113,111 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
 
 # =========================================================
+# 5. 페이지: 신규 상담 기록 관리 (독립 모수 및 회원 자동 변환)
+# =========================================================
+def page_consultations(consultations, members):
+    st.title("💡 신규 상담 기록 관리 (독립 모수)")
+
+    st.markdown("##### ➕ 신규 오프라인/온라인 상담 고객 등록")
+    with st.expander("📝 상담 등록 폼 열기", expanded=True):
+        with st.form("consult_form", clear_on_submit=True):
+            cc1, cc2, cc3 = st.columns(3)
+            c_name = cc1.text_input("상담 고객 이름 *", placeholder="예: 홍길동")
+            c_contact = cc2.text_input("연락처 * (숫자만)", placeholder="01012345678")
+            c_gender = cc3.selectbox("성별 *", ["여성", "남성"])
+
+            cc4, cc5, cc6 = st.columns(3)
+            c_goal = cc4.text_input("희망 운동 목적", placeholder="예: 다이어트, 체형교정, 바디프로필")
+            c_source = cc5.selectbox("유입 경로", ["네이버/인스타그램", "지인 추천", "길거리/간판", "기타"])
+            c_expect = cc6.selectbox("등록 가능성 (전환 예측)", ["높음", "중간", "낮음", "확인중"])
+
+            c_memo = st.text_area("💬 자세한 상담 내역 및 특이사항 (통증, 과거 운동경험 등)", placeholder="예: 우측 어깨 집힘 증상 있음. 과거 PT 20회 경험 있으나 자극 못 느껴 이탈.", height=90)
+
+            if st.form_submit_button("💡 상담 기록 저장", type="primary", use_container_width=True):
+                clean_contact = re.sub(r"[^0-9]", "", c_contact)
+                if not c_name.strip():
+                    st.error("⚠️ 고객 이름을 입력해 주세요.")
+                elif len(clean_contact) < 10:
+                    st.error("⚠️ 올바른 연락처 번호를 입력해 주세요.")
+                else:
+                    if len(clean_contact) == 11: formatted_contact = f"{clean_contact[:3]}-{clean_contact[3:7]}-{clean_contact[7:]}"
+                    else: formatted_contact = clean_contact
+
+                    new_c_id = next_id(consultations, "consult_id")
+                    today_str = get_kst_now().strftime("%Y-%m-%d")
+
+                    new_c = {
+                        "consult_id": new_c_id, "date": today_str,
+                        "name": c_name.strip(), "contact": formatted_contact,
+                        "gender": c_gender, "goal": c_goal, "source": c_source,
+                        "expect_status": c_expect, "memo": c_memo, "converted": False
+                    }
+                    consultations = pd.concat([consultations, pd.DataFrame([new_c])], ignore_index=True)
+                    if save_consultations(consultations):
+                        st.toast(f"'{c_name}' 고객의 상담 기록이 저장되었습니다!")
+                        rerun()
+
+    st.write("")
+    st.markdown("##### 📋 신규 상담 리스트 및 회원 전환 케어")
+
+    if consultations.empty:
+        st.info("등록된 신규 상담 기록이 없습니다.")
+    else:
+        for idx, c in consultations.sort_values("date", ascending=False).iterrows():
+            c_id = int(c["consult_id"])
+            is_conv = bool(c.get("converted", False))
+            conv_tag = '<b style="color:#166534;">🟢 회원 등록 완료</b>' if is_conv else '<b style="color:#2563EB;">⏳ 상담 진행중</b>'
+            g_badge = get_gender_badge_html(c.get("gender"))
+
+            st.markdown('<div class="pt-card">', unsafe_allow_html=True)
+            col_cs1, col_cs2 = st.columns([3, 1])
+
+            with col_cs1:
+                st.markdown(f"<b>{c['name']} 고객님</b> {g_badge} &nbsp;&nbsp; {conv_tag} &nbsp; <span style='font-size:12px; color:#64748B;'>상담일: {c['date']} | 연락처: {c['contact']}</span>", unsafe_allow_html=True)
+                st.markdown(f"<div style='font-size:13.5px; margin-top:4px;'>🎯 <b>목적:</b> {c.get('goal','-')} | 📍 <b>유입:</b> {c.get('source','-')} | 📊 <b>전환 가능성:</b> {c.get('expect_status','-')}</div>", unsafe_allow_html=True)
+                if c.get("memo"):
+                    st.caption(f"💬 상담 메모: {c['memo']}")
+
+            with col_cs2:
+                if not is_conv:
+                    if st.button("👥 회원으로 자동 등록 및 일지 이관", key=f"btn_convert_{c_id}_{idx}", type="primary", use_container_width=True):
+                        # 1. 회원 테이블에 신규 등록
+                        new_m_id = next_id(members, "member_id")
+                        today_obj = get_kst_now().date()
+                        auto_week = get_week_of_month(today_obj)
+
+                        new_m = {
+                            "member_id": new_m_id, "name": c["name"], "contact": c["contact"],
+                            "birth_date": "1995-01-01", "reg_date": today_obj.isoformat(),
+                            "total_sessions": 10, "remaining_sessions": 10,
+                            "trainer": MY_NAME, "status": "Active", "goal": c.get("goal") or "다이어트 및 체형교정",
+                            "session_price": 70000, "branch": "개인 PT", "gender": c.get("gender", "여성"), "age": 28,
+                            "tr_expect": "확인중", "re_status": "미지정", "week_group": auto_week,
+                            "memo": f"[신규상담 이관 메모]\n{c.get('memo','')}", 
+                            "survey_json": json.dumps({"pain": c.get("memo",""), "exp": "신규 상담 후 전환 등록"}, ensure_ascii=False),
+                            "exp_re_sessions": 10, "exp_re_price": 70000, "is_exp_configured": 0
+                        }
+                        members = pd.concat([members, pd.DataFrame([new_m])], ignore_index=True)
+                        save_members(members)
+
+                        # 2. 상담 데이터 상태를 회원 전환(converted=True)으로 업데이트
+                        consultations.loc[consultations["consult_id"] == c_id, "converted"] = True
+                        save_consultations(consultations)
+
+                        st.toast(f"🎉 '{c['name']}' 고객이 회원 관리로 전환 등록되었습니다!")
+                        rerun()
+                
+                if st.button("🗑️ 삭제", key=f"btn_del_consult_{c_id}_{idx}"):
+                    supabase.table("consultations").delete().eq("consult_id", c_id).execute()
+                    consultations = consultations[consultations["consult_id"].astype(str) != str(c_id)]
+                    save_consultations(consultations)
+                    st.toast("상담 기록이 삭제되었습니다.")
+                    rerun()
+
+            st.markdown('</div>', unsafe_allow_html=True)
+
+
+# =========================================================
 # 6. 페이지: 주차별 재등록 현황 및 AI 상담 스크립트 생성기
 # =========================================================
 def page_re_registration(members, sales):
@@ -1478,17 +1588,17 @@ def page_bodyplan(members, reports):
         goal_input = st.text_input(
             "🎯 회원 운동 목적", 
             value=r_row.get("goal_text") if has_existing else (selected_m.get("goal") or ""),
-            placeholder="예시: 체지방 감량, 라운드숄더 개선 및 하체 근력 증대",
+            placeholder="예시: 벌크업, 다이어트 및 체형교정",
             key=f"input_goal_{e_id}"
         )
         raw_journal = st.text_input(
             "1. 1회차 수업 진행 내용 (운동일지 메모)", 
-            placeholder="예시: 폼롤러 근막이완 및 고블릿 스쿼트 자세 정렬 지도",
+            placeholder="예시: 할로우테스트 및 스쿼트 정렬 지도",
             key=f"input_journal_{e_id}"
         )
         raw_posture = st.text_input(
             "2. 자세 체크 결과", 
-            placeholder="예시: 라운드숄더 및 골반 후방경사 패턴 관찰",
+            placeholder="예시: 골반 전방경사 패턴 관찰",
             key=f"input_posture_{e_id}"
         )
         raw_func = st.text_input(
@@ -1731,7 +1841,7 @@ def page_journal(members, logs):
 
 
 # =========================================================
-# 9. 페이지: 회원 관리
+# 9. 페이지: 회원 관리 (신규 상담 일지 자동 동기화 기능 포함)
 # =========================================================
 def page_members(members, sales, bookings, logs, reports):
     st.title("👥 회원 관리 & 성비 분석")
@@ -1785,6 +1895,24 @@ def page_members(members, sales, bookings, logs, reports):
                         today_obj = get_kst_now().date()
                         auto_week = get_week_of_month(today_obj)
 
+                        # [핵심 추가] 상담 관리 탭에 동일 이름/연락처 상담 일지가 존재하는지 자동 체크 및 이관
+                        consults_df = st.session_state.get("consultations_df", fetch_table("consultations", CONSULTATIONS_COLUMNS))
+                        c_match = consults_df[
+                            (consults_df["name"].astype(str).str.strip() == name.strip()) &
+                            (consults_df["contact"].astype(str).str.strip() == formatted_contact)
+                        ]
+
+                        init_memo = ""
+                        init_survey = "{}"
+                        if not c_match.empty:
+                            c_row = c_match.iloc[0]
+                            init_memo = f"[신규 상담일지 자동 이관]\n희망목적: {c_row.get('goal','')}\n상담메모: {c_row.get('memo','')}"
+                            init_survey = json.dumps({"pain": c_row.get("memo",""), "exp": "신규 상담 자동 연동 이관"}, ensure_ascii=False)
+                            
+                            # 상담 기록 상태를 회원 전환(converted=True)으로 변경
+                            consults_df.loc[consults_df["consult_id"] == c_row["consult_id"], "converted"] = True
+                            save_consultations(consults_df)
+
                         new_m = {
                             "member_id": new_m_id, "name": name.strip(), "contact": formatted_contact,
                             "birth_date": "1995-01-01", "reg_date": today_obj.isoformat(),
@@ -1793,7 +1921,7 @@ def page_members(members, sales, bookings, logs, reports):
                             "session_price": int(amount/sessions) if sessions>0 else 0,
                             "branch": "개인 PT", "gender": gender, "age": 28,
                             "tr_expect": "확인중", "re_status": "미지정", "week_group": auto_week,
-                            "memo": "", "survey_json": "{}", "exp_re_sessions": 10, "exp_re_price": int(amount/sessions) if sessions>0 else 70000, "is_exp_configured": 0
+                            "memo": init_memo, "survey_json": init_survey, "exp_re_sessions": 10, "exp_re_price": int(amount/sessions) if sessions>0 else 70000, "is_exp_configured": 0
                         }
                         members = pd.concat([members, pd.DataFrame([new_m])], ignore_index=True)
                         
@@ -2188,7 +2316,7 @@ def page_inbody(members, inbody):
 # =========================================================
 def main():
     init_all_files()
-    members, logs, inbody, sales, reports, bookings = get_cached_data()
+    members, logs, inbody, sales, reports, bookings, consultations = get_cached_data()
 
     st.sidebar.markdown(f"""
     <div style="padding:10px 4px 18px;">
@@ -2201,6 +2329,7 @@ def main():
         "메뉴 선택",
         [
             "📊 센터 대시보드", 
+            "💡 신규 상담 기록 관리",
             "🎯 주차별 재등록 현황", 
             "📋 3-STEP 바이오 프로파일", 
             "📝 수업일지 작성 & 전송", 
@@ -2212,6 +2341,8 @@ def main():
 
     if menu == "📊 센터 대시보드":
         page_dashboard(members, logs, sales, reports, bookings)
+    elif menu == "💡 신규 상담 기록 관리":
+        page_consultations(consultations, members)
     elif menu == "🎯 주차별 재등록 현황":
         page_re_registration(members, sales)
     elif menu == "📋 3-STEP 바이오 프로파일":
