@@ -1593,7 +1593,7 @@ def page_bodyplan(members, reports):
 
 
 # =========================================================
-# 8. 페이지: 수업일지 작성 (템플릿 클릭 원터치 자동 연동)
+# 8. 페이지: 수업일지 작성 (일지 저장 시 세션 자동 차감 로직 완전 제거)
 # =========================================================
 def page_journal(members, logs):
     st.title("📝 수업일지 작성 & 카톡 전송")
@@ -1686,28 +1686,23 @@ def page_journal(members, logs):
     """
     components.html(copy_html, height=50)
 
-    if st.button("✅ 일지 저장 (세션 -1 차감)", type="primary", use_container_width=True):
-        if rem_sessions_val <= 0:
-            st.error("잔여 세션이 없습니다.")
-        else:
-            valid_rows = edited_df[edited_df["종목"].astype(str).str.strip() != ""]
+    # [핵심 수정] 수업일지 저장 시 세션 차감 완전 제외 (세션 차감은 대시보드 달력 출결 버튼 전용)
+    if st.button("✅ 일지 저장", type="primary", use_container_width=True):
+        valid_rows = edited_df[edited_df["종목"].astype(str).str.strip() != ""]
 
-            new_log = {
-                "log_id": next_id(logs, "log_id"), "member_id": m_id, "date": log_date.isoformat(),
-                "start_time": start_time_sel, "end_time": end_time_sel,
-                "exercises_json": valid_rows.to_json(orient="records", force_ascii=False),
-                "good_points": good_points, "improve_points": improve_points,
-                "sent": False, "attendance": "출석"
-            }
-            logs = pd.concat([logs, pd.DataFrame([new_log])], ignore_index=True)
-            
-            if save_logs(logs):
-                members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "remaining_sessions"] = rem_sessions_val - 1
-                save_members(members)
-
-                st.session_state["exercise_rows_df"] = pd.DataFrame([{"종목": "", "중량(kg)": 0.0, "횟수": 0, "세트": 0}])
-                st.session_state["log_saved_success"] = True
-                rerun()
+        new_log = {
+            "log_id": next_id(logs, "log_id"), "member_id": m_id, "date": log_date.isoformat(),
+            "start_time": start_time_sel, "end_time": end_time_sel,
+            "exercises_json": valid_rows.to_json(orient="records", force_ascii=False),
+            "good_points": good_points, "improve_points": improve_points,
+            "sent": False, "attendance": "출석"
+        }
+        logs = pd.concat([logs, pd.DataFrame([new_log])], ignore_index=True)
+        
+        if save_logs(logs):
+            st.session_state["exercise_rows_df"] = pd.DataFrame([{"종목": "", "중량(kg)": 0.0, "횟수": 0, "세트": 0}])
+            st.session_state["log_saved_success"] = True
+            rerun()
 
     if st.session_state.get("log_saved_success", False):
         st.toast(f"🎉 '{member['name']}' 회원의 일지가 정상 등록되었습니다!", icon="✅")
@@ -1730,7 +1725,7 @@ def page_journal(members, logs):
 
 
 # =========================================================
-# 9. 페이지: 회원 관리 (회원 완전 삭제 강화 및 중복 뷰 완전 제거)
+# 9. 페이지: 회원 관리
 # =========================================================
 def page_members(members, sales, bookings, logs, reports):
     st.title("👥 회원 관리 & 성비 분석")
@@ -1879,12 +1874,10 @@ def page_members(members, sales, bookings, logs, reports):
             with c_del:
                 st.write("")
                 if st.button("🗑️", key=f"btn_del_mem_{m_id}_{idx}", use_container_width=True):
-                    # DB 완전 삭제 (int 및 str 타입 모두 대응)
                     for tbl in ["bookings", "logs", "reports", "inbody", "sales", "members"]:
                         supabase.table(tbl).delete().eq("member_id", m_id).execute()
                         supabase.table(tbl).delete().eq("member_id", str(m_id)).execute()
 
-                    # 세션 상태 캐시 완전 동기화
                     if "bookings_df" in st.session_state:
                         st.session_state["bookings_df"] = st.session_state["bookings_df"][st.session_state["bookings_df"]["member_id"].astype(str) != str(m_id)]
                     if "logs_df" in st.session_state:
@@ -1904,12 +1897,10 @@ def page_members(members, sales, bookings, logs, reports):
                     st.toast(f"'{m['name']}' 회원의 모든 데이터가 완전 삭제되었습니다.")
                     rerun()
 
-            # [통합 매끄러운 뷰어] 회원 이름 클릭 시 활성화되는 통합 메모 및 과거 수업일지 이력
             if selected_detail_id == m_id:
                 st.markdown("---")
                 st.markdown(f"#### 📋 '{m['name']}' 회원 특이사항 메모 및 사전 설문지 케어")
                 
-                # 1. 메모 및 사전 설문지 (상단)
                 memo_val = st.text_area(
                     "💬 회원 특이사항 및 개별 코멘트 메모",
                     value=str(m.get("memo") or ""),
@@ -1945,7 +1936,6 @@ def page_members(members, sales, bookings, logs, reports):
                         rerun()
 
                 st.write("")
-                # 2. 지난 수업일지 이력 (최하단 배치)
                 st.markdown("##### 📜 진행되었던 수업일지 이력")
                 m_detail_logs = logs[pd.to_numeric(logs["member_id"], errors="coerce") == m_id].sort_values("date", ascending=False)
                 if m_detail_logs.empty:
