@@ -581,11 +581,12 @@ if hasattr(st, "dialog"):
         g_badge = get_gender_badge_html(c.get("gender"))
         expect_badge = get_expect_badge_html(c.get("expect_status"))
 
-        st.markdown(f"### **{c['name']}** 고객님 {g_badge} {expect_badge}")
+        st.markdown(f"### **{c['name']}** 고객님")
+        st.markdown(f"{g_badge} &nbsp;&nbsp; 현 상태: {expect_badge}", unsafe_allow_html=True)
         st.markdown(f"<span style='font-size:13.5px; color:#64748B;'>상담일자: {c['date']} | 연락처: {c['contact']} | 유입: {c.get('source','-')}</span>", unsafe_allow_html=True)
         st.markdown("---")
 
-        d_tab1, d_tab2 = st.tabs(["📝 상담 메모 & 인테이크", "💳 회원 전환 & 결제 이관"])
+        d_tab1, d_tab2, d_tab3 = st.tabs(["📝 상담 메모 & 인테이크", "⚙️ 예상가 설정", "💳 회원 전환 & 결제 이관"])
 
         with d_tab1:
             edit_memo = st.text_area("💬 자세한 상담 내역 및 특이사항 메모", value=str(c.get("memo") or ""), height=120, key=f"dlg_cmemo_{c_id}")
@@ -596,14 +597,35 @@ if hasattr(st, "dialog"):
                 rerun()
 
         with d_tab2:
+            st.markdown("##### ⚙️ 신규 상담 예상 등록 금액 세팅")
+            curr_c_s = safe_int(c.get("exp_sessions"), 10)
+            if curr_c_s <= 0: curr_c_s = 10
+            curr_c_p = safe_int(c.get("exp_price"), 70000)
+            if curr_c_p <= 0: curr_c_p = 70000
+
+            col_cs, col_cp = st.columns(2)
+            n_c_s = col_cs.selectbox("예상 등록 세션", [10, 20, 30, 40, 50], index=[10, 20, 30, 40, 50].index(curr_c_s) if curr_c_s in [10, 20, 30, 40, 50] else 0, key=f"dlg_cfg_cs_{c_id}")
+            n_c_p = col_cp.number_input("예상 1회 단가(원)", min_value=10000, value=curr_c_p, step=5000, key=f"dlg_cfg_cp_{c_id}")
+
+            calc_c_tot = n_c_s * n_c_p
+            st.markdown(f"<h4 style='color:{COLOR_BLUE}; text-align:right;'>예상 매출액: {calc_c_tot:,.0f}원</h4>", unsafe_allow_html=True)
+
+            if st.button("💾 예상가 설정 저장", type="primary", use_container_width=True, key=f"dlg_save_cexp_{c_id}"):
+                consultations.loc[consultations["consult_id"] == c_id, "exp_sessions"] = n_c_s
+                consultations.loc[consultations["consult_id"] == c_id, "exp_price"] = n_c_p
+                save_consultations(consultations)
+                st.toast("신규 상담 예상 금액 설정이 저장되었습니다!")
+                rerun()
+
+        with d_tab3:
             if not is_conv:
-                st.markdown("##### 💳 결제 세션/단가 수동 지정 및 회원 등록 이관")
+                st.markdown("##### 💳 결제 세션/단가 지정 후 실제 회원 등록")
                 col_s, col_p = st.columns(2)
-                exp_sess = col_s.selectbox("예상 등록 세션(회)", [10, 20, 30, 40, 50], index=0, key=f"dlg_csess_{c_id}")
-                exp_price = col_p.number_input("예상 1회 단가(원)", min_value=10000, value=70000, step=5000, key=f"dlg_cprice_{c_id}")
+                exp_sess = col_s.selectbox("실제 등록 세션(회)", [10, 20, 30, 40, 50], index=[10, 20, 30, 40, 50].index(curr_c_s) if curr_c_s in [10, 20, 30, 40, 50] else 0, key=f"dlg_csess_{c_id}")
+                exp_price = col_p.number_input("실제 1회 단가(원)", min_value=10000, value=curr_c_p, step=5000, key=f"dlg_cprice_{c_id}")
                 tot_amt = exp_sess * exp_price
 
-                st.markdown(f"<h4 style='color:{COLOR_BLUE}; text-align:right;'>총 결제 예정액: {tot_amt:,.0f}원</h4>", unsafe_allow_html=True)
+                st.markdown(f"<h4 style='color:{COLOR_BLUE}; text-align:right;'>총 결제 확정액: {tot_amt:,.0f}원</h4>", unsafe_allow_html=True)
                 
                 if st.button("👥 정식 회원으로 확정 이관 등록", type="primary", use_container_width=True, key=f"dlg_btn_conv_{c_id}"):
                     new_m_id = next_id(members, "member_id")
@@ -657,7 +679,8 @@ if hasattr(st, "dialog"):
         gender_badge = get_gender_badge_html(m.get("gender"))
         expect_badge = get_expect_badge_html(m.get("tr_expect"))
 
-        st.markdown(f"### **{m['name']}** 회원님 {gender_badge} {expect_badge}")
+        st.markdown(f"### **{m['name']}** 회원님")
+        st.markdown(f"{gender_badge} &nbsp;&nbsp; 현 상태: {expect_badge}", unsafe_allow_html=True)
         st.markdown(f"<span style='font-size:13px; color:#64748B;'>연락처: {m['contact']} | 등록일: {m['reg_date']} | 잔여: <b>{rem}회</b> / 총 {total}회</span>", unsafe_allow_html=True)
         st.markdown("---")
 
@@ -1135,9 +1158,9 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
 
 # =========================================================
-# 5. 페이지: 통합 신규 상담 & 재등록 파이프라인 관리 탭 (단순 합계 반영)
+# 5. 페이지: 통합 신규 상담 & 재등록 파이프라인 관리 탭 (NameError 보완 및 logs 인자 전달)
 # =========================================================
-def page_consultations(consultations, members, sales):
+def page_consultations(consultations, members, sales, logs):
     st.title("💡 신규 상담 & 재등록 파이프라인 관리")
 
     today = get_kst_now().date()
@@ -2259,7 +2282,7 @@ def main():
     if menu == "📊 센터 대시보드":
         page_dashboard(members, logs, sales, reports, bookings)
     elif menu == "💡 신규 상담 & 재등록 관리":
-        page_consultations(consultations, members, sales)
+        page_consultations(consultations, members, sales, logs)
     elif menu == "📋 3-STEP 바이오 프로파일":
         page_bodyplan(members, reports)
     elif menu == "📝 수업일지 작성 & 전송":
