@@ -1113,7 +1113,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
 
 # =========================================================
-# 5. 페이지: 신규 상담 기록 관리 (에러 수정 및 실시간 총매출 표기)
+# 5. 페이지: 신규 상담 기록 관리 (삭제버튼 오류 보완 및 실시간 결제 집계)
 # =========================================================
 def page_consultations(consultations, members, sales):
     st.title("💡 신규 상담 기록 관리 (독립 모수)")
@@ -1176,21 +1176,19 @@ def page_consultations(consultations, members, sales):
                 st.markdown(f"<b>👤 {c['name']} 고객님</b> {g_badge} &nbsp;&nbsp; {conv_tag} &nbsp; <span style='font-size:12px; color:#64748B;'>상담일: {c['date']} | 연락처: {c['contact']}</span>", unsafe_allow_html=True)
                 st.markdown(f"<div style='font-size:13.5px; margin-top:4px;'>🎯 <b>목적:</b> {c.get('goal','-')} | 📍 <b>유입:</b> {c.get('source','-')} | 📊 <b>전환 가능성:</b> {c.get('expect_status','-')}</div>", unsafe_allow_html=True)
 
-            # [완벽 수정] 상담 삭제 버그 및 예외 처리 트라이 블록 보완
             with col_cs2:
                 if st.button("🗑️", key=f"btn_del_consult_{c_id}_{idx}", use_container_width=True):
                     try:
                         supabase.table("consultations").delete().eq("consult_id", c_id).execute()
                         supabase.table("consultations").delete().eq("consult_id", str(c_id)).execute()
-                    except Exception as e:
+                    except Exception:
                         pass
                     
                     consultations = consultations[consultations["consult_id"].astype(str) != str(c_id)]
                     save_consultations(consultations)
-                    st.toast("상담 기록이 완전 삭제되었습니다.")
+                    st.toast("상담 기록이 삭제되었습니다.")
                     rerun()
 
-            # [개선] 상담 고객명 클릭/확장 시 실시간 총매출액 표기
             with st.expander(f"💬 '{c['name']}' 상세 상담 메모 및 회원 전환 이관 설정", expanded=False):
                 if c.get("memo"):
                     st.markdown(f"**상담 메모:**\n{c['memo']}")
@@ -1206,7 +1204,6 @@ def page_consultations(consultations, members, sales):
                     with ec3:
                         st.markdown(f"<div style='padding-top:10px; font-size:15px; font-weight:800; color:{COLOR_BLUE};'>💰 총 결제 금액: {tot_pay:,.0f}원</div>", unsafe_allow_html=True)
                         if st.button("👥 회원 등록 및 일지 이관", key=f"btn_convert_full_{c_id}", type="primary", use_container_width=True):
-                            # 1. 회원 테이블에 신규 등록
                             new_m_id = next_id(members, "member_id")
                             today_obj = get_kst_now().date()
                             auto_week = get_week_of_month(today_obj)
@@ -1225,7 +1222,6 @@ def page_consultations(consultations, members, sales):
                             members = pd.concat([members, pd.DataFrame([new_m])], ignore_index=True)
                             save_members(members)
 
-                            # 2. 매출 결제 기록 집계
                             db_sales = fetch_table("sales", SALES_COLUMNS)
                             new_s = {
                                 "sale_id": next_id(db_sales, "sale_id"),
@@ -1238,7 +1234,6 @@ def page_consultations(consultations, members, sales):
                             updated_sales = pd.concat([db_sales, pd.DataFrame([new_s])], ignore_index=True)
                             save_sales(updated_sales)
 
-                            # 3. 상담 상태 업데이트
                             consultations.loc[consultations["consult_id"] == c_id, "converted"] = True
                             save_consultations(consultations)
 
@@ -1872,7 +1867,7 @@ def page_journal(members, logs):
 
 
 # =========================================================
-# 9. 페이지: 회원 관리
+# 9. 페이지: 회원 관리 (회원 삭제 시 상담 상태 복구 연동)
 # =========================================================
 def page_members(members, sales, bookings, logs, reports):
     st.title("👥 회원 관리 & 성비 분석")
@@ -1988,6 +1983,9 @@ def page_members(members, sales, bookings, logs, reports):
 
         for idx, m in view.iterrows():
             m_id = int(m["member_id"])
+            m_name = str(m.get("name","")).strip()
+            m_contact = str(m.get("contact","")).strip()
+
             total = int(pd.to_numeric(m.get("total_sessions", 0), errors="coerce"))
             rem = int(pd.to_numeric(m.get("remaining_sessions", 0), errors="coerce"))
             done = max(0, total - rem)
@@ -2037,10 +2035,19 @@ def page_members(members, sales, bookings, logs, reports):
             with c_del:
                 st.write("")
                 if st.button("🗑️", key=f"btn_del_mem_{m_id}_{idx}", use_container_width=True):
+                    # 1. DB 완전 삭제
                     for tbl in ["bookings", "logs", "reports", "inbody", "sales", "members"]:
                         supabase.table(tbl).delete().eq("member_id", m_id).execute()
                         supabase.table(tbl).delete().eq("member_id", str(m_id)).execute()
 
+                    # 2. [양방향 동기화] 상담 탭에 동일 고객 존재 시 '회원 등록 완료' ➡️ '상담 진행중'으로 복구
+                    consults_df = st.session_state.get("consultations_df", fetch_table("consultations", CONSULTATIONS_COLUMNS))
+                    c_mask = (consults_df["name"].astype(str).str.strip() == m_name) & (consults_df["contact"].astype(str).str.strip() == m_contact)
+                    if c_mask.any():
+                        consults_df.loc[c_mask, "converted"] = False
+                        save_consultations(consults_df)
+
+                    # 3. 세션 상태 캐시 완전 동기화
                     if "bookings_df" in st.session_state:
                         st.session_state["bookings_df"] = st.session_state["bookings_df"][st.session_state["bookings_df"]["member_id"].astype(str) != str(m_id)]
                     if "logs_df" in st.session_state:
@@ -2055,7 +2062,7 @@ def page_members(members, sales, bookings, logs, reports):
                     members = members[members["member_id"].astype(str) != str(m_id)]
                     save_members(members)
 
-                    st.toast(f"'{m['name']}' 회원의 모든 데이터가 완전 삭제되었습니다.")
+                    st.toast(f"'{m['name']}' 회원의 모든 데이터가 삭제되고 상담 탭 상태가 초기화되었습니다.")
                     rerun()
 
             if selected_detail_id == m_id:
