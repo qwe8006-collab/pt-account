@@ -680,7 +680,7 @@ def build_4step_report_html(member, report):
 
 
 # =========================================================
-# 4. 페이지 1: 센터 대시보드
+# 4. 페이지 1: 센터 대시보드 (통합 수업 예약 등록 포함)
 # =========================================================
 def page_dashboard(members, logs, sales, reports, bookings):
     st.title("📊 PT Account 통합 대시보드")
@@ -920,7 +920,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # 대시보드 당일 상세 수업 스케줄
+    # 대시보드 당일 상세 수업 스케줄 및 통합 신규 수업 예약 등록
     sel_date_str = st.session_state["dash_selected_date"]
     st.markdown('<div class="pt-card" style="border-top: 4px solid #2563EB;">', unsafe_allow_html=True)
     st.markdown(f"#### 📌 **{sel_date_str}** 상세 수업 스케줄")
@@ -1022,6 +1022,59 @@ def page_dashboard(members, logs, sales, reports, bookings):
                         st.toast(f"{m_name} 회원의 {s_time} 예약이 취소되었습니다.")
                         rerun()
 
+    # [이관 및 통합] 선택한 날짜에 바로 신규 수업 예약 등록 폼 노출
+    st.markdown("---")
+    st.markdown(f"##### ➕ **{sel_date_str}** 신규 수업 예약 등록")
+
+    if members.empty:
+        st.info("예약을 등록하려면 먼저 '회원 관리'에서 회원을 등록해 주세요.")
+    else:
+        valid_slots = []
+        for slot in TIME_SLOTS:
+            sh, sm = map(int, slot.split(":"))
+            if sel_date_str == today_str:
+                if sh > kst_now.hour:
+                    valid_slots.append(slot)
+            elif sel_date_str > today_str:
+                valid_slots.append(slot)
+
+        if not valid_slots:
+            st.warning(f"⚠️ {sel_date_str}의 예약 가능한 남은 운영 시간대가 없습니다.")
+        else:
+            col_p1, col_p2 = st.columns([1.5, 3])
+
+            with col_p1:
+                sel_slot = st.selectbox("시간대 선택", valid_slots, index=0, key="dash_time_selector")
+
+            with col_p2:
+                search_q = st.text_input("회원 검색", placeholder="이름을 입력하세요", key="dash_search_input")
+                candidates = members[members["name"].astype(str).str.contains(search_q, na=False)] if search_q else members
+
+                if not candidates.empty:
+                    cand_options = candidates.apply(lambda m: f"{m['name']} ({m.get('gender','남성')}, 잔여 {int(pd.to_numeric(m['remaining_sessions'], errors='coerce') or 0)}회)", axis=1).tolist()
+                    cand_idx = st.selectbox("예약할 회원 선택", range(len(cand_options)), format_func=lambda i: cand_options[i], key="dash_cand_select")
+
+                    if st.button("✅ 선택한 시간으로 수업 예약 확정", type="primary", use_container_width=True, key="dash_btn_confirm_booking"):
+                        chosen = candidates.iloc[cand_idx]
+                        chosen_rem_s = safe_int(chosen.get("remaining_sessions"), 0)
+
+                        if chosen_rem_s <= 0:
+                            st.error(f"⚠️ {chosen['name']} 회원의 잔여 세션이 0회입니다! 세션 재등록 후 예약을 진행해 주세요.")
+                        else:
+                            dup_check = active_bookings[(active_bookings["date"] == sel_date_str) & (active_bookings["time_slot"] == sel_slot)]
+                            if not dup_check.empty:
+                                st.error("⚠️ 예약할 수 없습니다! 해당 날짜와 시간대에 이미 등록된 수업이 있습니다.")
+                            else:
+                                new_booking = {
+                                    "booking_id": next_id(bookings, "booking_id"),
+                                    "member_id": int(chosen["member_id"]), "date": sel_date_str,
+                                    "time_slot": sel_slot, "status": "예약됨",
+                                }
+                                bookings = pd.concat([bookings, pd.DataFrame([new_booking])], ignore_index=True)
+                                save_bookings(bookings)
+                                st.toast(f"{chosen['name']} 회원이 {sel_date_str} {sel_slot}에 예약되었습니다.")
+                                rerun()
+
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.write("")
@@ -1046,163 +1099,6 @@ def page_dashboard(members, logs, sales, reports, bookings):
             fig = go.Figure(data=[go.Pie(labels=labels, values=values, hole=.4, marker_colors=colors)])
             fig.update_layout(height=260, margin=dict(l=10, r=10, t=10, b=10), showlegend=True)
             st.plotly_chart(fig, use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
-
-
-# =========================================================
-# 5. 페이지: 수업 등록
-# =========================================================
-def page_booking(members, bookings):
-    st.title("🗓️ 수업 등록 & 스케줄 달력")
-
-    kst_now = get_kst_now()
-    today_str = kst_now.date().isoformat()
-    
-    if "selected_cal_date" not in st.session_state:
-        st.session_state["selected_cal_date"] = today_str
-    if "cal_year" not in st.session_state:
-        st.session_state["cal_year"] = kst_now.year
-    if "cal_month" not in st.session_state:
-        st.session_state["cal_month"] = kst_now.month
-
-    year = st.session_state["cal_year"]
-    month = st.session_state["cal_month"]
-
-    st.markdown('<div class="pt-card">', unsafe_allow_html=True)
-
-    nav1, nav2, nav3 = st.columns([1, 4, 1])
-    if nav1.button("◀ 이전 달", use_container_width=True):
-        month -= 1
-        if month == 0:
-            month = 12
-            year -= 1
-        st.session_state["cal_year"], st.session_state["cal_month"] = year, month
-        rerun()
-    nav2.markdown(f"<h3 style='text-align:center;margin:0;color:{COLOR_NAVY};'>{year}년 {month}월</h3>", unsafe_allow_html=True)
-    if nav3.button("다음 달 ▶", use_container_width=True):
-        month += 1
-        if month == 13:
-            month = 1
-            year += 1
-        st.session_state["cal_year"], st.session_state["cal_month"] = year, month
-        rerun()
-
-    st.write("")
-
-    active_bookings = bookings[bookings["status"] != "취소"]
-
-    weekday_cols = st.columns(7)
-    for wc, label in zip(weekday_cols, WEEKDAY_LABELS_KR):
-        wc.markdown(f"<div class='cal-weekday'>{label}</div>", unsafe_allow_html=True)
-
-    cal_obj = calendar.Calendar(firstweekday=6)
-    month_weeks = cal_obj.monthdayscalendar(year, month)
-
-    for week in month_weeks:
-        week_cols = st.columns(7)
-        for wc, day_num in zip(week_cols, week):
-            if day_num == 0:
-                wc.write("")
-                continue
-            this_date = date(year, month, day_num).isoformat()
-            day_count = len(active_bookings[active_bookings["date"] == this_date])
-            is_selected = (this_date == st.session_state["selected_cal_date"])
-            is_today = (this_date == today_str)
-
-            if day_count > 0:
-                label = f"🟢 {day_num}일 ({day_count}건)"
-            else:
-                label = f"{day_num}"
-
-            btn_type = "primary" if is_selected else "secondary"
-            if wc.button(label, key=f"cal_day_{this_date}", use_container_width=True, type=btn_type):
-                st.session_state["selected_cal_date"] = this_date
-                rerun()
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    sel_date = st.session_state["selected_cal_date"]
-    st.markdown('<div class="pt-card" style="border-top: 4px solid #2563EB;">', unsafe_allow_html=True)
-    st.subheader(f"📌 {sel_date} 예정된 전체 수업 목록")
-
-    if members.empty:
-        st.info("예약을 등록하려면 먼저 '회원 관리'에서 회원을 등록해 주세요.")
-    else:
-        day_bookings = active_bookings[active_bookings["date"] == sel_date]
-
-        if day_bookings.empty:
-            st.info(f"{sel_date}에 예약된 수업이 없습니다.")
-        else:
-            merged_day_b = day_bookings.merge(members[["member_id", "name", "gender", "remaining_sessions"]], on="member_id", how="inner")
-            st.success(f"총 **{len(merged_day_b)}개**의 수업이 예약되어 있습니다.")
-
-            for idx, b_row in merged_day_b.sort_values("time_slot").iterrows():
-                b_id = b_row["booking_id"]
-                s_slot = b_row["time_slot"]
-                m_name = b_row["name"]
-                g_badge = get_gender_badge_html(b_row.get("gender"))
-                rem_s = b_row.get("remaining_sessions", 0)
-
-                col_b1, col_b2 = st.columns([4, 1])
-                with col_b1:
-                    st.markdown(f"<div class='slot-booked'>⏰ <b>{s_slot}</b> — 👤 <b>{m_name}</b> 회원님 {g_badge} <span class='rem-badge'>⏳ 잔여 {int(rem_s)}회</span></div>", unsafe_allow_html=True)
-                with col_b2:
-                    if st.button("❌ 예약 취소", key=f"cancel_b_{b_id}_{idx}", use_container_width=True):
-                        bookings.loc[bookings["booking_id"] == b_id, "status"] = "취소"
-                        save_bookings(bookings)
-                        st.toast(f"{m_name} 회원의 {s_slot} 예약이 취소되었습니다.")
-                        rerun()
-
-        st.markdown("---")
-        st.markdown("##### ➕ 신규 수업 예약 등록")
-
-        valid_slots = []
-        for slot in TIME_SLOTS:
-            sh, sm = map(int, slot.split(":"))
-            
-            if sel_date == today_str:
-                if sh > kst_now.hour:
-                    valid_slots.append(slot)
-            elif sel_date > today_str:
-                valid_slots.append(slot)
-
-        if not valid_slots:
-            st.warning(f"⚠️ {sel_date}의 예약 가능한 남은 운영 시간대가 없습니다.")
-        else:
-            col_p1, col_p2 = st.columns([1.5, 3])
-
-            with col_p1:
-                sel_slot = st.selectbox("시간대 선택", valid_slots, index=0, key="booking_time_selector_new")
-
-            with col_p2:
-                search_q = st.text_input("회원 검색", placeholder="이름을 입력하세요", key="booking_search_input_new")
-                candidates = members[members["name"].astype(str).str.contains(search_q, na=False)] if search_q else members
-
-                if not candidates.empty:
-                    cand_options = candidates.apply(lambda m: f"{m['name']} ({m.get('gender','남성')}, 잔여 {int(pd.to_numeric(m['remaining_sessions'], errors='coerce') or 0)}회)", axis=1).tolist()
-                    cand_idx = st.selectbox("예약할 회원 선택", range(len(cand_options)), format_func=lambda i: cand_options[i], key="cand_select_new")
-
-                    if st.button("✅ 선택한 시간으로 수업 예약 확정", type="primary", use_container_width=True):
-                        chosen = candidates.iloc[cand_idx]
-                        chosen_rem_s = safe_int(chosen.get("remaining_sessions"), 0)
-
-                        if chosen_rem_s <= 0:
-                            st.error(f"⚠️ {chosen['name']} 회원의 잔여 세션이 0회입니다! 세션 재등록 후 예약을 진행해 주세요.")
-                        else:
-                            dup_check = active_bookings[(active_bookings["date"] == sel_date) & (active_bookings["time_slot"] == sel_slot)]
-                            if not dup_check.empty:
-                                st.error("⚠️ 예약할 수 없습니다! 해당 날짜와 시간대에 이미 등록된 수업이 있습니다.")
-                            else:
-                                new_booking = {
-                                    "booking_id": next_id(bookings, "booking_id"),
-                                    "member_id": int(chosen["member_id"]), "date": sel_date,
-                                    "time_slot": sel_slot, "status": "예약됨",
-                                }
-                                bookings = pd.concat([bookings, pd.DataFrame([new_booking])], ignore_index=True)
-                                save_bookings(bookings)
-                                st.toast(f"{chosen['name']} 회원이 {sel_date} {sel_slot}에 예약되었습니다.")
-                                rerun()
-
     st.markdown('</div>', unsafe_allow_html=True)
 
 
@@ -1836,7 +1732,7 @@ def page_journal(members, logs):
 
 
 # =========================================================
-# 9. 페이지: 회원 관리 (통합 이력 & 수직 배치)
+# 9. 페이지: 회원 관리 (메모 버튼 제거 및 수직 통합 배치)
 # =========================================================
 def page_members(members, sales, bookings, logs, reports):
     st.title("👥 회원 관리 & 성비 분석")
@@ -1929,7 +1825,7 @@ def page_members(members, sales, bookings, logs, reports):
             mask = view["name"].astype(str).str.contains(search, na=False) | view["contact"].astype(str).str.contains(search, na=False)
             view = view[mask]
 
-        st.caption(f"조회된 회원 수: {len(view)}명 (회원 이름을 클릭하면 특이사항 메모와 지난 수업 이력을 연속해서 조회할 수 있습니다)")
+        st.caption(f"조회된 회원 수: {len(view)}명 (회원 이름을 클릭하면 특이사항 메모와 지난 수업 이력을 한눈에 조회할 수 있습니다)")
 
         re_pay_open_id = st.session_state.get("re_pay_open_id")
         selected_detail_id = st.session_state.get("selected_detail_member_id")
@@ -1947,7 +1843,7 @@ def page_members(members, sales, bookings, logs, reports):
 
             st.markdown('<div class="pt-card" style="padding-bottom:10px;">', unsafe_allow_html=True)
 
-            # [수정] 메모 버튼 제거 후 깔끔하게 배치
+            # 메모 버튼 제거 후 깔끔하게 컬럼 재배치
             c_name, c_info, c_re_btn, c_btn1, c_btn2, c_del = st.columns([1.5, 2.2, 0.9, 0.5, 0.5, 0.5])
 
             with c_name:
@@ -2008,17 +1904,17 @@ def page_members(members, sales, bookings, logs, reports):
                     st.toast(f"'{m['name']}' 회원의 모든 데이터가 완전 삭제되었습니다.")
                     rerun()
 
-            # [통합 매끄러운 뷰어] 회원 이름 클릭 시 활성화되는 통합 메모 및 과거 수업일지 이력
+            # [통합 매끄러운 뷰어] 회원 이름 클릭 시 활성화되는 메모 수정을 상단, 수업 이력을 최하단에 배치
             if selected_detail_id == m_id:
                 st.markdown("---")
-                st.markdown(f"#### 🔍 '{m['name']}' 회원의 통합 메모 및 수업 진행 이력")
+                st.markdown(f"#### 📋 '{m['name']}' 회원 특이사항 메모 및 사전 설문지 케어")
                 
-                # 1. 특이사항 메모 및 사전 설문지 (상단)
+                # 1. 메모 및 사전 설문지 (상단)
                 memo_val = st.text_area(
                     "💬 회원 특이사항 및 개별 코멘트 메모",
                     value=str(m.get("memo") or ""),
                     key=f"memo_ta_{m_id}",
-                    height=85,
+                    height=80,
                 )
 
                 with st.expander("🩺 PT 사전 상담 인테이크(Intake) 설문지 상세보기 / 수정", expanded=False):
@@ -2049,7 +1945,7 @@ def page_members(members, sales, bookings, logs, reports):
                         rerun()
 
                 st.write("")
-                # 2. 지난 수업일지 이력 (하단 배치)
+                # 2. 지난 수업일지 이력 (최하단 배치)
                 st.markdown("##### 📜 진행되었던 수업일지 이력")
                 m_detail_logs = logs[pd.to_numeric(logs["member_id"], errors="coerce") == m_id].sort_values("date", ascending=False)
                 if m_detail_logs.empty:
@@ -2267,7 +2163,6 @@ def main():
         "메뉴 선택",
         [
             "📊 센터 대시보드", 
-            "🗓️ 수업 등록", 
             "🎯 주차별 재등록 현황", 
             "📋 3-STEP 바이오 프로파일", 
             "📝 수업일지 작성 & 전송", 
@@ -2279,8 +2174,6 @@ def main():
 
     if menu == "📊 센터 대시보드":
         page_dashboard(members, logs, sales, reports, bookings)
-    elif menu == "🗓️ 수업 등록":
-        page_booking(members, bookings)
     elif menu == "🎯 주차별 재등록 현황":
         page_re_registration(members, sales)
     elif menu == "📋 3-STEP 바이오 프로파일":
