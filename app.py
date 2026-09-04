@@ -596,7 +596,7 @@ def get_attendance_badge_html(status):
 
 
 # =========================================================
-# 3. Streamlit @st.dialog 기반 팝업 모달 정의 (단일 카드형 메모 & 출결 중심 이력 연동)
+# 3. Streamlit @st.dialog 기반 팝업 모달 정의 (단일 카드형 메모 & 대시보드 출결 전용 이력 연동)
 # =========================================================
 
 # A. 상담 고객 상세 모달 팝업
@@ -615,7 +615,6 @@ if hasattr(st, "dialog"):
         d_tab1, d_tab2, d_tab3 = st.tabs(["📝 메모 작성 & 카드 히스토리", "⚙️ 예상가 수동 설정", "💳 회원 전환 & 결제 이관"])
 
         with d_tab1:
-            # 1. 상단 신규 메모 작성
             st.markdown("##### ✏️ 신규 상담 메모 작성")
             new_c_memo = st.text_area("새 메모 내용", height=85, key=f"dlg_input_cmemo_{c_id}", placeholder="상담 내역이나 특이사항을 입력해 주세요.")
             
@@ -632,7 +631,6 @@ if hasattr(st, "dialog"):
             st.markdown("---")
             st.markdown("##### 📜 과거 상담 메모 카드 히스토리")
             
-            # 2. 하단 단일 카드형 메모 리스트 파싱 및 렌더링
             latest_c_row = consultations[consultations["consult_id"] == c_id].iloc[0]
             raw_c_memo = str(latest_c_row.get("memo") or "")
             blocks = parse_memo_blocks(raw_c_memo)
@@ -734,10 +732,10 @@ if hasattr(st, "dialog"):
                     save_consultations(consultations)
                     st.toast("상담 상태가 '상담 진행중'으로 초기화되었습니다.")
 
-# B. 기존 회원 상세 모달 팝업 (출결 중심 진행이력 및 메모 상단배치)
+# B. 기존 회원 상세 모달 팝업 (대시보드 절대 출결 이력만 오롯이 연동)
 if hasattr(st, "dialog"):
     @st.dialog("👤 회원통합 상세 케어 모달")
-    def show_member_dialog(m, members, logs, inbody_df, logs_df):
+    def show_member_dialog(m, members, logs, inbody_df, logs_df, bookings_df=None):
         m_id = int(m["member_id"])
         total = int(pd.to_numeric(m.get("total_sessions", 0), errors="coerce"))
         rem = int(pd.to_numeric(m.get("remaining_sessions", 0), errors="coerce"))
@@ -748,10 +746,9 @@ if hasattr(st, "dialog"):
         st.markdown(f"<span style='font-size:13px; color:#64748B;'>연락처: {m['contact']} | 등록일: {m['reg_date']} | 잔여: <b>{rem}회</b> / 총 {total}회</span>", unsafe_allow_html=True)
         st.markdown("---")
 
-        m_tab1, m_tab2, m_tab3 = st.tabs(["📝 메모 작성 & 카드 히스토리", "📜 수업 진행 이력 (출결)", "⚙️ 재등록 예상가 & AI 상담 스크립트"])
+        m_tab1, m_tab2, m_tab3 = st.tabs(["📝 메모 작성 & 카드 히스토리", "🟢 대시보드 출결 이력", "⚙️ 재등록 예상가 & AI 상담 스크립트"])
 
         with m_tab1:
-            # 1. 상단 신규 메모 작성
             st.markdown("##### ✏️ 신규 회원 특이사항 메모 작성")
             new_m_memo = st.text_area("새 특이사항 입력", height=85, key=f"dlg_input_mmemo_{m_id}", placeholder="회원의 신체/특이사항 메모를 작성해 주세요.")
             
@@ -766,9 +763,8 @@ if hasattr(st, "dialog"):
                     st.toast("🎉 회원 메모가 상단에 추가 저장되었습니다!")
 
             st.markdown("---")
-            st.markdown("##### 📜 과거 회원 메모 카드 히스토리 (수정 및 삭제 가능)")
+            st.markdown("##### 📜 과거 회원 메모 카드 히스토리")
 
-            # 2. 하단 단일 카드형 메모 리스트 파싱 및 렌더링
             latest_m_row = members[pd.to_numeric(members["member_id"], errors="coerce") == m_id].iloc[0]
             raw_m_memo = str(latest_m_row.get("memo") or "")
             blocks = parse_memo_blocks(raw_m_memo)
@@ -802,20 +798,35 @@ if hasattr(st, "dialog"):
                             del st.session_state[f"editing_m_blk_{m_id}"]
                             st.toast("메모가 수정되었습니다!")
 
-        # [수정] 출결 중심 뱃지형 UI 노출 (대시보드 출결과 연동가져옴)
+        # [수정 완료] 수업일지(logs)가 아닌 대시보드 스케줄(bookings) 출결 기록만 오롯이 연동 가져옴
         with m_tab2:
-            m_logs = logs[pd.to_numeric(logs["member_id"], errors="coerce") == m_id].sort_values("date", ascending=False)
-            if m_logs.empty:
-                st.caption("기록된 과거 수업 진행 및 출결 이력이 없습니다.")
+            current_bookings = bookings_df if bookings_df is not None else st.session_state.get("bookings_df", fetch_table("bookings", BOOKINGS_COLUMNS))
+            m_bookings = current_bookings[
+                (current_bookings["member_id"].astype(str) == str(m_id)) & 
+                (current_bookings["status"] != "취소")
+            ].sort_values("date", ascending=False)
+
+            # 출결 상태를 알려주는 logs 테이블 정보 매칭
+            m_logs = logs[pd.to_numeric(logs["member_id"], errors="coerce") == m_id]
+
+            if m_bookings.empty:
+                st.caption("대시보드에 기록된 진행 및 출결 이력이 없습니다.")
             else:
-                st.markdown("##### 🟢 수업 진행 및 출결 현황 리스트 (대시보드 실시간 연동)")
-                for _, l_row in m_logs.iterrows():
-                    att_status = str(l_row.get("attendance") or "출석").strip()
+                st.markdown("##### 🟢 대시보드 출결 결과 이력 리스트")
+                for _, b_row in m_bookings.iterrows():
+                    b_date = str(b_row.get("date"))
+                    b_time = str(b_row.get("time_slot", "10:00"))
+
+                    log_match = m_logs[(m_logs["date"].astype(str) == b_date) & (m_logs["start_time"].astype(str) == b_time)]
+                    att_status = "미체크"
+                    if not log_match.empty:
+                        att_status = str(log_match.iloc[0].get("attendance") or "미체크").strip()
+
                     att_badge_html = get_attendance_badge_html(att_status)
                     st.markdown(f"""
                     <div style="background:#F8FAFC; border-left:4px solid {COLOR_BLUE}; border-radius:8px; padding:10px 16px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
                         <div>
-                            <b>📅 {l_row['date']}</b> &nbsp; <span style="font-size:12.5px; color:#64748B;">({l_row.get('start_time','-')} ~ {l_row.get('end_time','-')})</span>
+                            <b>📅 {b_date}</b> &nbsp; <span style="font-size:12.5px; color:#64748B;">({b_time})</span>
                         </div>
                         <div>
                             {att_badge_html}
@@ -1571,6 +1582,7 @@ def page_consultations(consultations, members, sales, logs):
 
         inbody_df = st.session_state.get("inbody_df", fetch_table("inbody", INBODY_COLUMNS))
         logs_df = st.session_state.get("logs_df", fetch_table("logs", LOGS_COLUMNS))
+        bookings_df = st.session_state.get("bookings_df", fetch_table("bookings", BOOKINGS_COLUMNS))
 
         for idx, m in members.iterrows():
             m_id = int(m["member_id"])
@@ -1607,7 +1619,7 @@ def page_consultations(consultations, members, sales, logs):
             with col_info:
                 if st.button(f"👤 {m['name']}", key=f"btn_re_mname_dlg_{m_id}_{idx}"):
                     if hasattr(st, "dialog"):
-                        show_member_dialog(m, members, logs, inbody_df, logs_df)
+                        show_member_dialog(m, members, logs, inbody_df, logs_df, bookings_df)
                     else:
                         st.session_state["selected_detail_member_id"] = m_id
                         rerun()
@@ -1861,7 +1873,7 @@ def page_bodyplan(members, reports):
 
 
 # =========================================================
-# 8. 페이지: 수업일지 작성
+# 8. 페이지: 수업일지 작성 (현재 시각 기준 직전/최근 수업 회원 자동 세팅)
 # =========================================================
 def page_journal(members, logs):
     st.title("📝 수업일지 작성 & 카톡 전송")
@@ -1869,11 +1881,33 @@ def page_journal(members, logs):
         st.info("회원을 먼저 등록해 주세요.")
         return
 
-    options = members.apply(lambda m: f"{m['name']} ({m.get('gender','남성')}, 잔여 {int(m['remaining_sessions'])}회)", axis=1).tolist()
-    default_sel = st.session_state.get("current_journal_member_idx", 0)
-    if default_sel >= len(options): default_sel = 0
+    # [수정] 방금 막 수업을 마쳤거나 가장 최근 예약된 회원을 자동 감지하여 드롭다운 1순위 세팅
+    kst_now = get_kst_now()
+    today_str = kst_now.date().isoformat()
+    now_hm = kst_now.strftime("%H:%M")
 
-    idx = st.selectbox("회원 선택", range(len(options)), index=default_sel, format_func=lambda i: options[i])
+    default_auto_idx = 0
+    bookings_df = st.session_state.get("bookings_df", fetch_table("bookings", BOOKINGS_COLUMNS))
+    active_b = bookings_df[(bookings_df["status"] != "취소") & (bookings_df["date"] == today_str)]
+
+    if not active_b.empty:
+        # 현재 시각보다 같거나 직전에 시작한 스케줄 정렬
+        past_today_b = active_b[active_b["time_slot"] <= now_hm].sort_values("time_slot", ascending=False)
+        if not past_today_b.empty:
+            target_m_id = str(past_today_b.iloc[0]["member_id"])
+            matching_m_indices = members.index[members["member_id"].astype(str) == target_m_id].tolist()
+            if matching_m_indices:
+                default_auto_idx = matching_m_indices[0]
+
+    options = members.apply(lambda m: f"{m['name']} ({m.get('gender','남성')}, 잔여 {int(m['remaining_sessions'])}회)", axis=1).tolist()
+    
+    if "current_journal_member_idx" not in st.session_state:
+        st.session_state["current_journal_member_idx"] = default_auto_idx
+
+    selected_idx = st.session_state["current_journal_member_idx"]
+    if selected_idx >= len(options): selected_idx = 0
+
+    idx = st.selectbox("회원 선택 (최근 수업 진행 회원 자동 추천)", range(len(options)), index=selected_idx, format_func=lambda i: options[i])
     st.session_state["current_journal_member_idx"] = idx
     member = members.iloc[idx]
     m_id = int(member["member_id"])
@@ -1887,7 +1921,7 @@ def page_journal(members, logs):
     st.markdown("#### 오늘 수업 일정 및 운동 진행 내용")
 
     col_date, col_st, col_et = st.columns([1.2, 1, 1])
-    log_date = col_date.date_input("수업 날짜", value=get_kst_now().date())
+    log_date = col_date.date_input("수업 날짜", value=kst_now.date())
 
     start_time_sel = col_st.selectbox("수업 시작 시간", TIME_SLOTS, index=4)
     
@@ -2107,6 +2141,7 @@ def page_members(members, sales, bookings, logs, reports):
 
         inbody_df = st.session_state.get("inbody_df", fetch_table("inbody", INBODY_COLUMNS))
         logs_df = st.session_state.get("logs_df", fetch_table("logs", LOGS_COLUMNS))
+        bookings_df = st.session_state.get("bookings_df", fetch_table("bookings", BOOKINGS_COLUMNS))
 
         for idx, m in view.iterrows():
             m_id = int(m["member_id"])
@@ -2127,7 +2162,7 @@ def page_members(members, sales, bookings, logs, reports):
                 memo_tag = " ⭐" if has_memo else ""
                 if st.button(f"👤 {m['name']}{memo_tag}", key=f"btn_name_dlg_{m_id}_{idx}", use_container_width=True):
                     if hasattr(st, "dialog"):
-                        show_member_dialog(m, members, logs, inbody_df, logs_df)
+                        show_member_dialog(m, members, logs, inbody_df, logs_df, bookings_df)
                     else:
                         st.session_state["selected_detail_member_id"] = m_id
                         rerun()
