@@ -344,7 +344,6 @@ def parse_memo_blocks(raw_text):
     if not raw_text or not str(raw_text).strip():
         return []
     
-    # [YYYY-MM-DD HH:MM] 패턴을 기준으로 텍스트 분할
     pattern = r"(\[\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}\])"
     parts = re.split(pattern, str(raw_text).strip())
     
@@ -357,7 +356,6 @@ def parse_memo_blocks(raw_text):
             blocks.append({"stamp": stamp, "body": body})
         i += 2
         
-    # 타임스탬프가 없는 기존 단일 메모 처리
     if not blocks and raw_text.strip():
         blocks.append({"stamp": "[기존 메모 기록]", "body": raw_text.strip()})
         
@@ -365,7 +363,7 @@ def parse_memo_blocks(raw_text):
 
 
 def rebuild_memo_text(blocks):
-    return "\n".join([f"{b['stamp']}\n{b['body']}".strip() for b in blocks]).strip()
+    return "\n\n".join([f"{b['stamp']}\n{b['body']}".strip() for b in blocks]).strip()
 
 
 # =========================================================
@@ -598,7 +596,7 @@ def get_attendance_badge_html(status):
 
 
 # =========================================================
-# 3. Streamlit @st.dialog 기반 팝업 모달 정의 (팝업 꺼짐 완전 차단)
+# 3. Streamlit @st.dialog 기반 팝업 모달 정의 (단일 카드형 메모 & 출결 중심 이력 연동)
 # =========================================================
 
 # A. 상담 고객 상세 모달 팝업
@@ -617,7 +615,7 @@ if hasattr(st, "dialog"):
         d_tab1, d_tab2, d_tab3 = st.tabs(["📝 메모 작성 & 카드 히스토리", "⚙️ 예상가 수동 설정", "💳 회원 전환 & 결제 이관"])
 
         with d_tab1:
-            # 1. 상단 신규 메모 작성 및 저장
+            # 1. 상단 신규 메모 작성
             st.markdown("##### ✏️ 신규 상담 메모 작성")
             new_c_memo = st.text_area("새 메모 내용", height=85, key=f"dlg_input_cmemo_{c_id}", placeholder="상담 내역이나 특이사항을 입력해 주세요.")
             
@@ -736,7 +734,7 @@ if hasattr(st, "dialog"):
                     save_consultations(consultations)
                     st.toast("상담 상태가 '상담 진행중'으로 초기화되었습니다.")
 
-# B. 기존 회원 상세 모달 팝업 (단일 카드형 메모 및 팝업 유지 처리)
+# B. 기존 회원 상세 모달 팝업 (출결 중심 진행이력 및 메모 상단배치)
 if hasattr(st, "dialog"):
     @st.dialog("👤 회원통합 상세 케어 모달")
     def show_member_dialog(m, members, logs, inbody_df, logs_df):
@@ -804,13 +802,13 @@ if hasattr(st, "dialog"):
                             del st.session_state[f"editing_m_blk_{m_id}"]
                             st.toast("메모가 수정되었습니다!")
 
-        # 출결 중심 뱃지형 UI 노출
+        # [수정] 출결 중심 뱃지형 UI 노출 (대시보드 출결과 연동가져옴)
         with m_tab2:
             m_logs = logs[pd.to_numeric(logs["member_id"], errors="coerce") == m_id].sort_values("date", ascending=False)
             if m_logs.empty:
-                st.caption("기록된 과거 수업일지가 없습니다.")
+                st.caption("기록된 과거 수업 진행 및 출결 이력이 없습니다.")
             else:
-                st.markdown("##### 🟢 역대 수업 출결 현황 리스트")
+                st.markdown("##### 🟢 수업 진행 및 출결 현황 리스트 (대시보드 실시간 연동)")
                 for _, l_row in m_logs.iterrows():
                     att_status = str(l_row.get("attendance") or "출석").strip()
                     att_badge_html = get_attendance_badge_html(att_status)
