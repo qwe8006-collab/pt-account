@@ -243,11 +243,13 @@ def refine_journal_feedback(text, is_good=True):
     else:
         return f"다음 수업 시 {clean_t} 요소를 생체역학적으로 디테일하게 케어하여 더욱 부상 없이 완벽한 자세 정렬을 만들어 드리겠습니다."
 
+# [수정 1] RAW 데이터 오타 스마트 교정 및 피트니스 정밀 용어 정제 엔진
 def refine_raw_text(text, category="general"):
     if not text or not str(text).strip():
         return "특별한 관절 기능 제한 없음 (양호)"
 
     t = str(text).strip()
+    # ㅋㅋㅋ, ㅎㅎㅎ, ㅋ, ㅎ 등 추임새 오타 제거
     t = re.sub(r"[ㅋㅎ|a-zA-Z]+", "", t).strip()
 
     if category == "goal":
@@ -260,14 +262,15 @@ def refine_raw_text(text, category="general"):
     refined_phrases = []
 
     for p in phrase_list:
-        clean_p = re.sub(r"(이|가)?\s*(닫혀있으심|닫힘|약하심|약함|부족함|약|하심|있으심|있음|보임|같음|관찰됨|보임|유지함|사용함|사용미숙|미숙|활용미숙|활용x|안됨)$", "", p).strip()
+        # 오타 및 줄임말 스마트 보정 패턴
+        clean_p = re.sub(r"(이|가)?\s*(닫혀있으심|닫힘|약하심|약함|부족함|약|하심|있으심|있음|보임|같음|관찰됨|유지함|사용함|사용미숙|미숙|활용미숙|활용x|안됨)$", "", p).strip()
 
         if category == "posture":
-            if re.search(r"라운드\s*숄더|말린\s*어깨|굽은\s*어깨|어깨말림|어깨말릳|말림", p):
+            if re.search(r"골반전뱅경사|골반전방경사|전방경사|골반전방|허리 꺾임|요추전만", p):
+                refined_phrases.append("골반 전방 경사(Pelvic Anterior Tilt) 패턴에 따른 요추 과전만 소견")
+            elif re.search(r"라운드\s*숄더|말린\s*어깨|굽은\s*어깨|어깨말림|어깨말릳|말림", p):
                 refined_phrases.append("상지교차증후군(Upper Crossed Syndrome) 양상의 라운드 숄더 및 견갑골 회전 말림")
-            elif re.search(r"전방\s*경사|골반전방|허리 꺾임|요추전만", p):
-                refined_phrases.append("골반 전방 경사(Pelvic Anterior Tilt)에 따른 요추 과전만 패턴")
-            elif re.search(r"후방\s*경사|골반후방|플랫백|굽은허리", p):
+            elif re.search(r"골반후방경사|후방경사|골반후방|플랫백|굽은허리", p):
                 refined_phrases.append("골반 후방 경사(Pelvic Posterior Tilt)에 따른 요·흉추 후만 양상")
             elif re.search(r"거북목|일자목|목통증", p):
                 refined_phrases.append("경추 전만 소실 및 경추부 방사통을 유발하는 거북목 패턴")
@@ -277,8 +280,8 @@ def refine_raw_text(text, category="general"):
                 refined_phrases.append(f"{clean_p} 관련 관절 정렬 편차 관찰")
 
         elif category == "func":
-            if re.search(r"가슴|어깨|불균형|양\s*어깨", p):
-                refined_phrases.append("대흉근 수축 및 가슴 프레스 패턴 수행 시 양측 견갑골 수축 불균형 및 흉쇄관절 비대칭")
+            if re.search(r"어깨불균형|벤치프레스|가슴운동|양\s*어깨|어깨\s*불균형", p):
+                refined_phrases.append("벤치프레스 및 가슴 프레스 수행 시 양측 견갑골 수축 비대칭 및 흉쇄관절 회전 편차")
             elif re.search(r"횡격막|호흡|복압|숨|호흡미숙|90x90", p):
                 refined_phrases.append("호흡 수행 시 횡격막(Diaphragm) 수축 미숙 및 코어 복압(IAP) 형성 가동성 저하")
             elif re.search(r"측면\s*사슬|측면|외측사슬|측면사슬", p):
@@ -287,8 +290,8 @@ def refine_raw_text(text, category="general"):
                 refined_phrases.append("견갑골 동적 안정성 저하 및 상방/하방 회전 모션의 가동성 제한")
             elif re.search(r"고관절|굴근|장요근|내전근", p):
                 refined_phrases.append("고관절 복합체(Hip Complex) 가동 범위 제한 및 내전근 활성도 약화")
-            elif re.search(r"벗윙크|스쿼트|말림", p):
-                refined_phrases.append("딥 스쿼트 패턴 시 고관절 굴곡 제한에 따른 벗윙크(Butt Wink) 보상 작용")
+            elif re.search(r"할로우|스쿼트|벗윙크", p):
+                refined_phrases.append("스쿼트 및 할로우 테스트 패턴 시 고관절 굴곡 제한에 따른 코어 보상 작용")
             elif re.search(r"지면|접지|발바닥|아치", p):
                 refined_phrases.append("하체 하중 지지 시 발바닥 족궁(Arch) 접지 및 지면 반발력 전달 제한")
             else:
@@ -450,7 +453,6 @@ def next_id(df, id_col):
     return int(pd.to_numeric(df[id_col], errors="coerce").fillna(0).max()) + 1
 
 
-# [수정 100% 완전 보완] 회원 전송용 메시지 생성 함수 내 MY_NAME 방어적 참조
 def generate_friendly_message_from_data(member_id, member_name, rem_sessions, exercises_df, good, improve):
     trainer_title_name = MY_NAME if 'MY_NAME' in globals() else "김준수"
     ex_summary = []
@@ -781,9 +783,10 @@ if hasattr(st, "dialog"):
                 save_consultations(consultations)
                 st.toast("개별 예상 금액 설정이 저장되었습니다!")
 
+        # [수정 2] 정식 회원 확정 이관 시 '기존 회원 재등록 주차별 관리' 탭으로 자동 전체 통합 이관
         with d_tab3:
             if not is_conv:
-                st.markdown("##### 💳 실제 결제 세션/단가 지정 후 회원 확정 이관")
+                st.markdown("##### 💳 실제 결제 세션/단가 지정 후 정식 회원 확정 이관")
                 col_s, col_p = st.columns(2)
                 exp_sess = col_s.number_input("실제 등록 세션(회)", min_value=1, value=curr_c_s if curr_c_s > 0 else 10, step=5, key=f"dlg_csess_{c_id}")
                 exp_price = col_p.number_input("실제 1회 단가(원)", min_value=10000, value=curr_c_p if curr_c_p > 0 else 70000, step=5000, key=f"dlg_cprice_{c_id}")
@@ -802,10 +805,10 @@ if hasattr(st, "dialog"):
                         "total_sessions": int(exp_sess), "remaining_sessions": int(exp_sess),
                         "trainer": MY_NAME, "status": "Active", "goal": c.get("goal") or "다이어트 및 체형교정",
                         "session_price": int(exp_price), "branch": "개인 PT", "gender": c.get("gender", "여성"), "age": 28,
-                        "tr_expect": "확인중", "re_status": "미지정", "week_group": auto_week,
-                        "memo": f"[신규상담 이관 메모]\n{raw_c_memo}", 
+                        "tr_expect": "확인중", "re_status": "결제완료", "week_group": auto_week,
+                        "memo": f"[신규상담 정식 이관 메모]\n{raw_c_memo}", 
                         "survey_json": json.dumps({"pain": raw_c_memo, "exp": "신규 상담 후 전환 등록"}, ensure_ascii=False),
-                        "exp_re_sessions": 10, "exp_re_price": int(exp_price), "is_exp_configured": 0
+                        "exp_re_sessions": 10, "exp_re_price": int(exp_price), "is_exp_configured": 1
                     }
                     members = pd.concat([members, pd.DataFrame([new_m])], ignore_index=True)
                     save_members(members)
@@ -820,9 +823,10 @@ if hasattr(st, "dialog"):
                     save_sales(updated_sales)
 
                     consultations.loc[consultations["consult_id"] == c_id, "converted"] = True
+                    consultations.loc[consultations["consult_id"] == c_id, "expect_status"] = "높음"
                     save_consultations(consultations)
 
-                    st.toast(f"🎉 '{c['name']}' 고객이 {exp_sess}회({tot_amt:,.0f}원)로 성공적으로 이관 등록되었습니다!")
+                    st.toast(f"🎉 '{c['name']}' 고객이 {exp_sess}회({tot_amt:,.0f}원)로 기존 회원 주차별 관리 탭({auto_week})에 자동 이관 등록되었습니다!")
                     rerun()
             else:
                 st.success("🟢 이미 정식 회원으로 등록 이관이 완료된 고객입니다.")
@@ -992,7 +996,7 @@ if hasattr(st, "dialog"):
 
 
 # =========================================================
-# 6. 페이지 1: 센터 대시보드 (회원명 클릭 라인 정렬 완벽 수정)
+# 6. 페이지 1: 센터 대시보드 (회원명 인라인 나란히 정렬)
 # =========================================================
 def page_dashboard(members, logs, sales, reports, bookings):
     st.title("📊 PT Account 통합 대시보드")
@@ -1279,7 +1283,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
                 rem_badge = f'<span class="rem-badge">⏳ 잔여 {rem_s}회</span>'
 
                 # [수정 반영 2] 회원명 + 성별 + 잔여 세션 + 출석 상태 수평 완벽 인라인 나란히 정렬
-                st.markdown(f'<div style="background:#F8FAFC; border-left:4px solid {COLOR_BLUE}; border-radius:10px; padding:10px 18px; margin-bottom:6px;">', unsafe_allow_html=True)
+                st.markdown(f'<div style="background:#F8FAFC; border-left:4px solid {COLOR_BLUE}; border-radius:10px; padding:12px 18px; margin-bottom:6px;">', unsafe_allow_html=True)
                 
                 col_d_left, col_d_right = st.columns([4, 1.2])
 
@@ -1297,7 +1301,6 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
                 st.markdown('</div>', unsafe_allow_html=True)
 
-                # 클릭 시 다이얼로그 모달 오픈
                 col_dash_m1, _ = st.columns([1.8, 3.2])
                 with col_dash_m1:
                     if st.button(f"🔍 {m_name} 회원 케어상세 열기", key=f"dash_m_dlg_direct_btn_{m_id}_{idx}_{s_time}"):
@@ -1550,6 +1553,7 @@ def page_consultations(consultations, members, sales, logs):
 
     main_m_tab1, main_m_tab2 = st.tabs(["💡 신규 상담 고객 관리", "🎯 기존 회원 재등록 주차별 관리"])
 
+    # === [서브 탭 1: 신규 상담 고객 관리] ===
     with main_m_tab1:
         st.markdown("##### ➕ 신규 오프라인/온라인 상담 고객 등록")
         
@@ -1573,12 +1577,20 @@ def page_consultations(consultations, members, sales, logs):
             for idx, c in view_consults.sort_values("date", ascending=False).iterrows():
                 c_id = int(c["consult_id"])
                 is_conv = bool(c.get("converted", False))
-                conv_tag = '<b style="color:#166534;">🟢 회원 등록 완료</b>' if is_conv else '<b style="color:#2563EB;">⏳ 상담 진행중</b>'
-                g_badge = get_gender_badge_html(c.get("gender"))
-                
+
                 c_expect_val = str(c.get("expect_status", "확인중")).strip()
                 expect_badge_color_html = get_expect_badge_html(c_expect_val)
 
+                # [수정 3] 이탈 선택 시 상태 표시 태그도 '🔴 상담 이탈'로 연동 표출
+                if is_conv:
+                    conv_tag = '<b style="color:#166534;">🟢 회원 등록 완료</b>'
+                elif c_expect_val == "이탈":
+                    conv_tag = '<b style="color:#991B1B;">🔴 상담 이탈</b>'
+                else:
+                    conv_tag = '<b style="color:#2563EB;">⏳ 상담 진행중</b>'
+
+                g_badge = get_gender_badge_html(c.get("gender"))
+                
                 c_exp_s = safe_int(c.get("exp_sessions"), 0)
                 c_exp_p = safe_int(c.get("exp_price"), 0)
                 calc_c_exp_amt = c_exp_s * c_exp_p
@@ -1807,17 +1819,17 @@ def page_bodyplan(members, reports):
         )
         raw_journal = st.text_input(
             "1. 1회차 수업 진행 내용 (운동일지 메모)", 
-            placeholder="예시: 호흡인식 및 하체운동, 체중중심 체크",
+            placeholder="예시: 할로우 테스트 스쿼트",
             key=f"input_journal_{e_id}"
         )
         raw_posture = st.text_input(
             "2. 자세 체크 결과", 
-            placeholder="예시: 라운드숄더관찰, 골반전방경사 보유중",
+            placeholder="예시: 골반전뱅경사, 라운드숄더",
             key=f"input_posture_{e_id}"
         )
         raw_func = st.text_input(
             "3. 움직임 체크 결과", 
-            placeholder="예시: 가슴운동 시 양 어깨 불균형ㅋ, 호흡시 횡격막근 사용 미숙",
+            placeholder="예시: 어깨불균형이 있어 벤치프레스 시 불균형",
             key=f"input_func_{e_id}"
         )
 
@@ -1914,7 +1926,7 @@ def page_bodyplan(members, reports):
 
 
 # =========================================================
-# 9. 페이지: 수업일지 작성 (일 1회 작성 제약 및 히스토리 수정/삭제 기능)
+# 9. 페이지: 수업일지 작성 (일 1회 작성 제약 및 히스토리 수정/삭제 파이프라인 신설)
 # =========================================================
 def page_journal(members, logs):
     st.title("📝 수업일지 작성 & 카톡 전송")
@@ -1973,6 +1985,7 @@ def page_journal(members, logs):
 
     end_time_sel = col_et.text_input("수업 종료 시간 (자동계산)", value=auto_end_time)
 
+    # [수정 반영 2] 동일 날짜 수업일지 일 1회 작성 제약
     log_date_iso = log_date.isoformat()
     existing_today_log = logs[
         (logs["member_id"].astype(str) == str(m_id)) & 
@@ -2060,6 +2073,7 @@ def page_journal(members, logs):
         st.session_state["log_saved_success"] = False
 
     st.write("")
+    # [수정 반영 3] 이전 수업일지 복기 히스토리 수정/삭제 파이프라인 신설
     with st.expander(f"📜 '{m_name_str}' 회원의 이전 수업일지 & 피드백 히스토리 복기 (수정/삭제 가능)", expanded=True):
         m_logs = logs[pd.to_numeric(logs["member_id"], errors="coerce") == m_id].sort_values("date", ascending=False)
         if m_logs.empty:
@@ -2534,7 +2548,7 @@ def page_inbody(members, inbody):
 
 
 # =========================================================
-# 12. 메인 라우팅
+# 12. 메인 라우팅 (하향식 스코프 완벽 적용)
 # =========================================================
 def main():
     members, logs, inbody, sales, reports, bookings, consultations = get_cached_data()
