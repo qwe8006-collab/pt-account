@@ -328,7 +328,6 @@ def refine_raw_text(text, category="general"):
     return clean_t
 
 
-# [수정] 이탈 상태 뱃지 매핑 완전 수정
 def get_expect_badge_html(status_str):
     st_val = str(status_str).strip()
     if st_val == "높음":
@@ -597,10 +596,10 @@ def get_attendance_badge_html(status):
 
 
 # =========================================================
-# 3. Streamlit @st.dialog 기반 팝업 모달 정의 (신규 등록 다이얼로그 모달 탑재)
+# 3. Streamlit @st.dialog 기반 팝업 모달 정의
 # =========================================================
 
-# [신규 추가] 🔴 신규 상담 등록 전용 다이얼로그 팝업 모달
+# 🔴 신규 상담 등록 다이얼로그 팝업 모달
 if hasattr(st, "dialog"):
     @st.dialog("🔴 신규 오프라인/온라인 상담 & 인테이크 등록")
     def show_add_consultation_dialog(consultations):
@@ -859,7 +858,6 @@ if hasattr(st, "dialog"):
                             del st.session_state[f"editing_m_blk_{m_id}"]
                             st.toast("메모가 수정되었습니다!")
 
-        # 대시보드 스케줄(bookings) 출결 기록만 오롯이 연동 가져옴
         with m_tab2:
             current_bookings = bookings_df if bookings_df is not None else st.session_state.get("bookings_df", fetch_table("bookings", BOOKINGS_COLUMNS))
             m_bookings = current_bookings[
@@ -952,7 +950,7 @@ if hasattr(st, "dialog"):
 
 
 # =========================================================
-# 4. 페이지 1: 센터 대시보드
+# 4. 페이지 1: 센터 대시보드 (회원명 클릭 시 모달 직접 오픈)
 # =========================================================
 def page_dashboard(members, logs, sales, reports, bookings):
     st.title("📊 PT Account 통합 대시보드")
@@ -1242,7 +1240,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
                 <div style="background:#F8FAFC; border-left:4px solid {COLOR_BLUE}; border-radius:10px; padding:14px 20px; margin-bottom:8px;">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <div style="display:flex; align-items:center; gap:8px;">
-                            👤 <b><span style="font-size:17px; color:{COLOR_NAVY};">{m_name} 회원님</span></b> {g_badge} {rem_badge} {att_badge}
+                            {g_badge} {rem_badge} {att_badge}
                         </div>
                         <div style="font-weight:800; font-size:15px; color:{COLOR_BLUE};">
                             ⏰ {s_time} ~ {e_time}
@@ -1251,10 +1249,10 @@ def page_dashboard(members, logs, sales, reports, bookings):
                 </div>
                 """, unsafe_allow_html=True)
 
-                # [수정 완료] 빨간색 메모 태그 완전 삭제 및 회원명 클릭 시 모달 열기 연동
-                col_dash_m1, _ = st.columns([2, 3])
+                # [수정 1] 별도 팝업 열기 버튼 삭제 ➡️ 회원명 버튼 클릭 시 팝업 직접 오픈
+                col_dash_m1, _ = st.columns([1.5, 3.5])
                 with col_dash_m1:
-                    if st.button(f"👤 {m_name} 회원 케어 팝업 모달 열기", key=f"dash_m_dlg_btn_{m_id}_{idx}_{s_time}"):
+                    if st.button(f"👤 {m_name} 회원님 모달 열기", key=f"dash_m_dlg_direct_btn_{m_id}_{idx}_{s_time}"):
                         m_row_target = members[members["member_id"].astype(str) == str(m_id)].iloc[0]
                         if hasattr(st, "dialog"):
                             show_member_dialog(m_row_target, members, logs, inbody_df, logs, day_bookings)
@@ -1438,7 +1436,7 @@ def page_consultations(consultations, members, sales, logs):
 
     st.write("")
 
-    # 상단 분석 차트 탭 (신규 상담 가능성 분류 차트 동적 업데이트)
+    # 상단 분석 차트 탭
     st.markdown('<div class="pt-card">', unsafe_allow_html=True)
     st.subheader(f"📊 {today.year}년 {today.month}월 상담 & 재등록 파이프라인 동향")
     
@@ -1452,7 +1450,7 @@ def page_consultations(consultations, members, sales, logs):
         if consultations.empty:
             st.info("등록된 신규 상담 데이터가 없습니다.")
         else:
-            # [수정] 신규 상담 상태 차트에 '이탈' 카테고리 완전 추가 반영
+            # [수정 3] 신규 상담 상태 차트에 '이탈' 카테고리 완전 반영
             c_high = len(consultations[consultations["expect_status"] == "높음"])
             c_mid = len(consultations[consultations["expect_status"] == "중간"])
             c_low = len(consultations[consultations["expect_status"] == "낮음"])
@@ -1509,12 +1507,12 @@ def page_consultations(consultations, members, sales, logs):
     # 메인 관리 서브 탭
     main_m_tab1, main_m_tab2 = st.tabs(["💡 신규 상담 고객 관리", "🎯 기존 회원 재등록 주차별 관리"])
 
-    # === [서브 탭 1: 신규 상담 고객 관리 (🔴 신규 상담 등록 다이얼로그 버튼 대체)] ===
+    # === [서브 탭 1: 신규 상담 고객 관리] ===
     with main_m_tab1:
         st.markdown("##### ➕ 신규 오프라인/온라인 상담 고객 등록")
         
-        # [수정] 복잡한 익스팬더 대신 빨간색 팝업 다이얼로그 버튼으로 깔끔하게 대체
-        if st.button("🔴 신규 상담 & 인테이크 설문 등록 폼 열기", type="primary", use_container_width=True, key="btn_open_reg_consult_dlg"):
+        # [수정 4] 🔴 신규 상담 등록 전용 팝업 다이얼로그 버튼 탑재
+        if st.button("🔴 신규 상담 & 인테이크 설문 등록 팝업 열기", type="primary", use_container_width=True, key="btn_open_reg_consult_dlg"):
             if hasattr(st, "dialog"):
                 show_add_consultation_dialog(consultations)
 
@@ -1536,16 +1534,16 @@ def page_consultations(consultations, members, sales, logs):
                 is_conv = bool(c.get("converted", False))
                 conv_tag = '<b style="color:#166534;">🟢 회원 등록 완료</b>' if is_conv else '<b style="color:#2563EB;">⏳ 상담 진행중</b>'
                 g_badge = get_gender_badge_html(c.get("gender"))
-                expect_badge = get_expect_badge_html(c.get("expect_status"))
-
+                
                 c_exp_s = safe_int(c.get("exp_sessions"), 0)
                 c_exp_p = safe_int(c.get("exp_price"), 0)
                 calc_c_exp_amt = c_exp_s * c_exp_p
 
                 exp_disp_str = f"<b>예상 매출: {calc_c_exp_amt:,.0f}원</b> ({c_exp_s}회 x {c_exp_p:,.0f}원)" if (c_exp_s > 0 and c_exp_p > 0) else "<span style='color:#94A3B8;'>(예상 매출가 미설정)</span>"
 
+                # [수정 3] 신규 상담 카드 리스트에도 전환 예상 상태 드롭다운 바로 노출
                 st.markdown('<div class="pt-card">', unsafe_allow_html=True)
-                col_cs1, col_cs2, col_cs3 = st.columns([1.5, 2.5, 0.5])
+                col_cs1, col_cs_exp, col_cs2, col_cs3 = st.columns([1.5, 1.1, 2.2, 0.5])
 
                 with col_cs1:
                     if st.button(f"👤 {c['name']}", key=f"btn_c_dlg_{c_id}_{idx}", use_container_width=True):
@@ -1554,7 +1552,16 @@ def page_consultations(consultations, members, sales, logs):
                         else:
                             st.session_state["selected_consult_detail_id"] = c_id
                             rerun()
-                    st.markdown(f"{g_badge} &nbsp; {expect_badge}", unsafe_allow_html=True)
+                    st.markdown(f"{g_badge}", unsafe_allow_html=True)
+
+                with col_cs_exp:
+                    c_exp_idx = safe_index(["높음", "중간", "낮음", "이탈", "확인중"], c.get("expect_status"), 4)
+                    n_c_exp = st.selectbox("등록 예상", ["높음", "중간", "낮음", "이탈", "확인중"], index=c_exp_idx, key=f"c_exp_sel_{c_id}_{idx}")
+                    if n_c_exp != str(c.get("expect_status","")).strip():
+                        consultations.loc[consultations["consult_id"] == c_id, "expect_status"] = n_c_exp
+                        save_consultations(consultations)
+                        st.toast(f"'{c['name']}' 고객의 등록 가능성이 {n_c_exp}(으)로 변경되었습니다.")
+                        rerun()
 
                 with col_cs2:
                     st.markdown(f"<b>상태:</b> {conv_tag} &nbsp;|&nbsp; {exp_disp_str}", unsafe_allow_html=True)
@@ -1610,7 +1617,7 @@ def page_consultations(consultations, members, sales, logs):
             idx_re = safe_index(RE_STATUS_OPTIONS, m.get('re_status'), 5)
             idx_wk = safe_index(week_options_dynamic, m.get('week_group'), 1)
 
-            # [수정] TR예상 값이 '이탈'일 때도 정확히 🔴 이탈 뱃지로 표출되도록 고도화
+            # [수정 2] TR예상 값이 '이탈'일 때도 정확히 🔴 이탈 뱃지로 표출되도록 고도화
             exp_badge_html = get_expect_badge_html(m.get('tr_expect'))
 
             st.markdown('<div class="pt-card">', unsafe_allow_html=True)
@@ -1873,7 +1880,7 @@ def page_bodyplan(members, reports):
 
 
 # =========================================================
-# 8. 페이지: 수업일지 작성 (현재 시각 기준 직전/최근 수업 회원 자동 세팅)
+# 8. 페이지: 수업일지 작성
 # =========================================================
 def page_journal(members, logs):
     st.title("📝 수업일지 작성 & 카톡 전송")
