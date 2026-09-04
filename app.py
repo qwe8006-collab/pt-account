@@ -950,7 +950,7 @@ if hasattr(st, "dialog"):
 
 
 # =========================================================
-# 4. 페이지 1: 센터 대시보드 (회원명 클릭 시 모달 직접 오픈)
+# 4. 페이지 1: 센터 대시보드
 # =========================================================
 def page_dashboard(members, logs, sales, reports, bookings):
     st.title("📊 PT Account 통합 대시보드")
@@ -1249,7 +1249,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
                 </div>
                 """, unsafe_allow_html=True)
 
-                # [수정 1] 별도 팝업 열기 버튼 삭제 ➡️ 회원명 버튼 클릭 시 팝업 직접 오픈
+                # [수정 1] 별도 팝업 열기 버튼 완전히 제거 ➡️ 회원명 버튼 클릭 시 팝업 직접 오픈
                 col_dash_m1, _ = st.columns([1.5, 3.5])
                 with col_dash_m1:
                     if st.button(f"👤 {m_name} 회원님 모달 열기", key=f"dash_m_dlg_direct_btn_{m_id}_{idx}_{s_time}"):
@@ -1375,11 +1375,9 @@ def page_consultations(consultations, members, sales, logs):
     today = get_kst_now().date()
     curr_weeks = get_month_weeks_list(today.year, today.month)
 
-    # 1. 신규 상담 수동 세팅 기반 예상 매출 단순 합계 (미전환건 대상)
-    unconverted_consults = consultations[consultations["converted"] != True]
-    
+    # 1. [수정 1] 신규 상담 예상 매출 합계 산식 고도화 (전환완료 건 포함 동적 합산)
     consult_pipeline_amount = 0
-    for _, uc in unconverted_consults.iterrows():
+    for _, uc in consultations.iterrows():
         c_exp_s = safe_int(uc.get("exp_sessions"), 0)
         c_exp_p = safe_int(uc.get("exp_price"), 0)
         
@@ -1436,7 +1434,7 @@ def page_consultations(consultations, members, sales, logs):
 
     st.write("")
 
-    # 상단 분석 차트 탭
+    # 상단 분석 차트 탭 (신규 상담 가능성 분류 차트 동적 업데이트)
     st.markdown('<div class="pt-card">', unsafe_allow_html=True)
     st.subheader(f"📊 {today.year}년 {today.month}월 상담 & 재등록 파이프라인 동향")
     
@@ -1450,7 +1448,7 @@ def page_consultations(consultations, members, sales, logs):
         if consultations.empty:
             st.info("등록된 신규 상담 데이터가 없습니다.")
         else:
-            # [수정 3] 신규 상담 상태 차트에 '이탈' 카테고리 완전 반영
+            # [수정 3] 신규 상담 상태 차트에 '이탈' 카테고리 완전 추가 반영
             c_high = len(consultations[consultations["expect_status"] == "높음"])
             c_mid = len(consultations[consultations["expect_status"] == "중간"])
             c_low = len(consultations[consultations["expect_status"] == "낮음"])
@@ -1541,7 +1539,7 @@ def page_consultations(consultations, members, sales, logs):
 
                 exp_disp_str = f"<b>예상 매출: {calc_c_exp_amt:,.0f}원</b> ({c_exp_s}회 x {c_exp_p:,.0f}원)" if (c_exp_s > 0 and c_exp_p > 0) else "<span style='color:#94A3B8;'>(예상 매출가 미설정)</span>"
 
-                # [수정 3] 신규 상담 카드 리스트에도 전환 예상 상태 드롭다운 바로 노출
+                # [수정 2] 신규 상담 카드 리스트에도 전환 예상 상태 드롭다운 바로 노출 (높음/중간/낮음/이탈/확인중)
                 st.markdown('<div class="pt-card">', unsafe_allow_html=True)
                 col_cs1, col_cs_exp, col_cs2, col_cs3 = st.columns([1.5, 1.1, 2.2, 0.5])
 
