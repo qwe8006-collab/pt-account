@@ -339,6 +339,35 @@ def get_expect_badge_html(status_str):
     return '<span class="tr-check">❔ 확인중</span>'
 
 
+# 메모 텍스트를 카드형 배열 블록 구조로 파싱하는 헬퍼 함수
+def parse_memo_blocks(raw_text):
+    if not raw_text or not str(raw_text).strip():
+        return []
+    
+    # [YYYY-MM-DD HH:MM] 패턴을 기준으로 텍스트 분할
+    pattern = r"(\[\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}\])"
+    parts = re.split(pattern, str(raw_text).strip())
+    
+    blocks = []
+    i = 1
+    while i < len(parts):
+        stamp = parts[i].strip()
+        body = parts[i+1].strip() if i+1 < len(parts) else ""
+        if stamp:
+            blocks.append({"stamp": stamp, "body": body})
+        i += 2
+        
+    # 타임스탬프가 없는 기존 단일 메모 처리
+    if not blocks and raw_text.strip():
+        blocks.append({"stamp": "[기존 메모 기록]", "body": raw_text.strip()})
+        
+    return blocks
+
+
+def rebuild_memo_text(blocks):
+    return "\n".join([f"{b['stamp']}\n{b['body']}".strip() for b in blocks]).strip()
+
+
 # =========================================================
 # 2. Supabase DB 세분화 캐싱 & 예외 처리 강화
 # =========================================================
@@ -569,7 +598,7 @@ def get_attendance_badge_html(status):
 
 
 # =========================================================
-# 3. Streamlit @st.dialog 기반 팝업 모달 정의 (메모 편집/삭제 및 상단배치)
+# 3. Streamlit @st.dialog 기반 팝업 모달 정의 (팝업 꺼짐 완전 차단)
 # =========================================================
 
 # A. 상담 고객 상세 모달 팝업
@@ -585,58 +614,59 @@ if hasattr(st, "dialog"):
         st.markdown(f"<span style='font-size:13.5px; color:#64748B;'>상담일자: {c['date']} | 연락처: {c['contact']} | 유입: {c.get('source','-')} | 목적: {c.get('goal','-')}</span>", unsafe_allow_html=True)
         st.markdown("---")
 
-        d_tab1, d_tab2, d_tab3 = st.tabs(["📝 메모 작성 & 히스토리", "⚙️ 예상가 수동 설정", "💳 회원 전환 & 결제 이관"])
+        d_tab1, d_tab2, d_tab3 = st.tabs(["📝 메모 작성 & 카드 히스토리", "⚙️ 예상가 수동 설정", "💳 회원 전환 & 결제 이관"])
 
         with d_tab1:
-            curr_memo = str(c.get("memo") or "")
-            
-            # [개선] 상단 입력창 배치
+            # 1. 상단 신규 메모 작성 및 저장
             st.markdown("##### ✏️ 신규 상담 메모 작성")
-            new_c_memo = st.text_area("메모 내용 입력", height=85, key=f"dlg_add_cmemo_{c_id}", placeholder="새로운 상담 특이사항을 작성해 주세요.")
-            if st.button("💾 메모 추가 저장", type="primary", use_container_width=True, key=f"dlg_save_cmemo_{c_id}"):
-                now_str = get_kst_now().strftime("[%Y-%m-%d %H:%M]")
-                updated_memo = f"{now_str} {new_c_memo}\n{curr_memo}".strip() if curr_memo else f"{now_str} {new_c_memo}".strip()
-                consultations.loc[consultations["consult_id"] == c_id, "memo"] = updated_memo
-                save_consultations(consultations)
-                st.toast("신규 메모가 상단에 추가되었습니다!")
-                rerun()
+            new_c_memo = st.text_area("새 메모 내용", height=85, key=f"dlg_input_cmemo_{c_id}", placeholder="상담 내역이나 특이사항을 입력해 주세요.")
+            
+            if st.button("💾 메모 추가 저장", type="primary", use_container_width=True, key=f"dlg_save_cmemo_btn_{c_id}"):
+                if new_c_memo.strip():
+                    now_str = get_kst_now().strftime("[%Y-%m-%d %H:%M]")
+                    curr_memo = str(consultations.loc[consultations["consult_id"] == c_id, "memo"].values[0] or "")
+                    updated_memo = f"{now_str}\n{new_c_memo.strip()}\n\n{curr_memo}".strip() if curr_memo else f"{now_str}\n{new_c_memo.strip()}".strip()
+                    
+                    consultations.loc[consultations["consult_id"] == c_id, "memo"] = updated_memo
+                    save_consultations(consultations)
+                    st.toast("🎉 신규 메모가 추가 저장되었습니다!")
 
             st.markdown("---")
-            st.markdown("##### 📜 과거 작성된 상담 메모 히스토리 (수정 및 삭제 가능)")
+            st.markdown("##### 📜 과거 상담 메모 카드 히스토리")
             
-            if curr_memo:
-                memo_lines = [line.strip() for line in curr_memo.split("\n") if line.strip()]
-                for m_idx, line in enumerate(memo_lines):
-                    col_m1, col_m2, col_m3 = st.columns([3.5, 0.5, 0.5])
-                    col_m1.caption(f"📌 {line}")
-                    
-                    # 메모 수정
-                    if col_m2.button("✏️", key=f"edit_cmemo_{c_id}_{m_idx}"):
-                        st.session_state[f"edit_cmemo_target_{c_id}"] = (m_idx, line)
-                        rerun()
-                    
-                    # 메모 삭제
-                    if col_m3.button("🗑️", key=f"del_cmemo_{c_id}_{m_idx}"):
-                        memo_lines.pop(m_idx)
-                        consultations.loc[consultations["consult_id"] == c_id, "memo"] = "\n".join(memo_lines)
-                        save_consultations(consultations)
-                        st.toast("해당 메모가 삭제되었습니다.")
-                        rerun()
+            # 2. 하단 단일 카드형 메모 리스트 파싱 및 렌더링
+            latest_c_row = consultations[consultations["consult_id"] == c_id].iloc[0]
+            raw_c_memo = str(latest_c_row.get("memo") or "")
+            blocks = parse_memo_blocks(raw_c_memo)
 
-                # 메모 수정 에디터 폼
-                if f"edit_cmemo_target_{c_id}" in st.session_state:
-                    e_idx, e_line = st.session_state[f"edit_cmemo_target_{c_id}"]
-                    st.markdown(f"**✏️ {e_idx+1}번 메모 수정 중:**")
-                    mod_line = st.text_input("수정할 내용", value=e_line, key=f"input_mod_cmemo_{c_id}")
-                    if st.button("수정 완료", key=f"btn_confirm_cmemo_{c_id}"):
-                        memo_lines[e_idx] = mod_line
-                        consultations.loc[consultations["consult_id"] == c_id, "memo"] = "\n".join(memo_lines)
-                        save_consultations(consultations)
-                        del st.session_state[f"edit_cmemo_target_{c_id}"]
-                        st.toast("메모가 수정되었습니다.")
-                        rerun()
+            if not blocks:
+                st.caption("기록된 과거 메모가 없습니다.")
             else:
-                st.caption("기록된 메모 히스토리가 없습니다.")
+                for b_idx, block in enumerate(blocks):
+                    st.markdown(f"""
+                    <div style="background:#FFFFFF; border:1px solid #CBD5E1; border-radius:10px; padding:12px; margin-bottom:8px;">
+                        <div style="font-weight:800; color:#2563EB; font-size:13px; margin-bottom:4px;">📌 {block['stamp']}</div>
+                        <div style="font-size:13.5px; color:#1E293B; white-space:pre-wrap;">{block['body']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    btn_c1, btn_c2, _ = st.columns([0.8, 0.8, 3.4])
+                    if btn_c1.button("✏️ 수정", key=f"edit_c_blk_{c_id}_{b_idx}"):
+                        st.session_state[f"editing_c_blk_{c_id}"] = b_idx
+                    if btn_c2.button("🗑️ 삭제", key=f"del_c_blk_{c_id}_{b_idx}"):
+                        blocks.pop(b_idx)
+                        consultations.loc[consultations["consult_id"] == c_id, "memo"] = rebuild_memo_text(blocks)
+                        save_consultations(consultations)
+                        st.toast("해당 메모 카드가 삭제되었습니다.")
+
+                    if st.session_state.get(f"editing_c_blk_{c_id}") == b_idx:
+                        mod_body = st.text_area("메모 내용 수정", value=block['body'], key=f"input_mod_c_{c_id}_{b_idx}")
+                        if st.button("수정 완료 저장", key=f"btn_save_mod_c_{c_id}_{b_idx}"):
+                            blocks[b_idx]['body'] = mod_body
+                            consultations.loc[consultations["consult_id"] == c_id, "memo"] = rebuild_memo_text(blocks)
+                            save_consultations(consultations)
+                            del st.session_state[f"editing_c_blk_{c_id}"]
+                            st.toast("메모가 수정되었습니다!")
 
         with d_tab2:
             st.markdown("##### ⚙️ 신규 상담 개별 예상가 수동 세팅")
@@ -655,7 +685,6 @@ if hasattr(st, "dialog"):
                 consultations.loc[consultations["consult_id"] == c_id, "exp_price"] = n_c_p
                 save_consultations(consultations)
                 st.toast("개별 예상 금액 설정이 저장되었습니다!")
-                rerun()
 
         with d_tab3:
             if not is_conv:
@@ -679,8 +708,8 @@ if hasattr(st, "dialog"):
                         "trainer": MY_NAME, "status": "Active", "goal": c.get("goal") or "다이어트 및 체형교정",
                         "session_price": int(exp_price), "branch": "개인 PT", "gender": c.get("gender", "여성"), "age": 28,
                         "tr_expect": "확인중", "re_status": "미지정", "week_group": auto_week,
-                        "memo": f"[신규상담 이관 메모]\n{curr_memo}", 
-                        "survey_json": json.dumps({"pain": curr_memo, "exp": "신규 상담 후 전환 등록"}, ensure_ascii=False),
+                        "memo": f"[신규상담 이관 메모]\n{raw_c_memo}", 
+                        "survey_json": json.dumps({"pain": raw_c_memo, "exp": "신규 상담 후 전환 등록"}, ensure_ascii=False),
                         "exp_re_sessions": 10, "exp_re_price": int(exp_price), "is_exp_configured": 0
                     }
                     members = pd.concat([members, pd.DataFrame([new_m])], ignore_index=True)
@@ -706,9 +735,8 @@ if hasattr(st, "dialog"):
                     consultations.loc[consultations["consult_id"] == c_id, "converted"] = False
                     save_consultations(consultations)
                     st.toast("상담 상태가 '상담 진행중'으로 초기화되었습니다.")
-                    rerun()
 
-# B. 기존 회원 상세 모달 팝업 (출결 중심 진행이력 및 메모 상단배치)
+# B. 기존 회원 상세 모달 팝업 (단일 카드형 메모 및 팝업 유지 처리)
 if hasattr(st, "dialog"):
     @st.dialog("👤 회원통합 상세 케어 모달")
     def show_member_dialog(m, members, logs, inbody_df, logs_df):
@@ -722,60 +750,61 @@ if hasattr(st, "dialog"):
         st.markdown(f"<span style='font-size:13px; color:#64748B;'>연락처: {m['contact']} | 등록일: {m['reg_date']} | 잔여: <b>{rem}회</b> / 총 {total}회</span>", unsafe_allow_html=True)
         st.markdown("---")
 
-        m_tab1, m_tab2, m_tab3 = st.tabs(["📝 특이사항 메모 작성 & 히스토리", "📜 수업 진행 이력 (출결)", "⚙️ 재등록 예상가 & AI 상담 스크립트"])
+        m_tab1, m_tab2, m_tab3 = st.tabs(["📝 메모 작성 & 카드 히스토리", "📜 수업 진행 이력 (출결)", "⚙️ 재등록 예상가 & AI 상담 스크립트"])
 
         with m_tab1:
-            curr_memo = str(m.get("memo") or "")
-
-            # [개선] 상단 입력창 배치
+            # 1. 상단 신규 메모 작성
             st.markdown("##### ✏️ 신규 회원 특이사항 메모 작성")
-            new_m_memo = st.text_area("메모 내용 입력", height=85, key=f"dlg_add_mmemo_{m_id}", placeholder="새로운 회원 특이사항을 작성해 주세요.")
-            if st.button("💾 회원 메모 누적 저장", type="primary", use_container_width=True, key=f"dlg_save_mmemo_{m_id}"):
-                now_str = get_kst_now().strftime("[%Y-%m-%d %H:%M]")
-                updated_memo = f"{now_str} {new_m_memo}\n{curr_memo}".strip() if curr_memo else f"{now_str} {new_m_memo}".strip()
-                members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "memo"] = updated_memo
-                save_members(members)
-                st.toast("신규 회원 메모가 상단에 추가되었습니다!")
-                rerun()
+            new_m_memo = st.text_area("새 특이사항 입력", height=85, key=f"dlg_input_mmemo_{m_id}", placeholder="회원의 신체/특이사항 메모를 작성해 주세요.")
+            
+            if st.button("💾 회원 메모 추가 저장", type="primary", use_container_width=True, key=f"dlg_save_mmemo_btn_{m_id}"):
+                if new_m_memo.strip():
+                    now_str = get_kst_now().strftime("[%Y-%m-%d %H:%M]")
+                    curr_memo = str(members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "memo"].values[0] or "")
+                    updated_memo = f"{now_str}\n{new_m_memo.strip()}\n\n{curr_memo}".strip() if curr_memo else f"{now_str}\n{new_m_memo.strip()}".strip()
+                    
+                    members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "memo"] = updated_memo
+                    save_members(members)
+                    st.toast("🎉 회원 메모가 상단에 추가 저장되었습니다!")
 
             st.markdown("---")
-            st.markdown("##### 📜 과거 작성된 회원 메모 히스토리 (수정 및 삭제 가능)")
+            st.markdown("##### 📜 과거 회원 메모 카드 히스토리 (수정 및 삭제 가능)")
 
-            if curr_memo:
-                memo_lines = [line.strip() for line in curr_memo.split("\n") if line.strip()]
-                for m_idx, line in enumerate(memo_lines):
-                    col_m1, col_m2, col_m3 = st.columns([3.5, 0.5, 0.5])
-                    col_m1.caption(f"📌 {line}")
-                    
-                    # 메모 수정
-                    if col_m2.button("✏️", key=f"edit_mmemo_{m_id}_{m_idx}"):
-                        st.session_state[f"edit_mmemo_target_{m_id}"] = (m_idx, line)
-                        rerun()
-                    
-                    # 메모 삭제
-                    if col_m3.button("🗑️", key=f"del_mmemo_{m_id}_{m_idx}"):
-                        memo_lines.pop(m_idx)
-                        members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "memo"] = "\n".join(memo_lines)
-                        save_members(members)
-                        st.toast("해당 메모가 삭제되었습니다.")
-                        rerun()
+            # 2. 하단 단일 카드형 메모 리스트 파싱 및 렌더링
+            latest_m_row = members[pd.to_numeric(members["member_id"], errors="coerce") == m_id].iloc[0]
+            raw_m_memo = str(latest_m_row.get("memo") or "")
+            blocks = parse_memo_blocks(raw_m_memo)
 
-                # 메모 수정 에디터 폼
-                if f"edit_mmemo_target_{m_id}" in st.session_state:
-                    e_idx, e_line = st.session_state[f"edit_mmemo_target_{m_id}"]
-                    st.markdown(f"**✏️ {e_idx+1}번 메모 수정 중:**")
-                    mod_line = st.text_input("수정할 내용", value=e_line, key=f"input_mod_mmemo_{m_id}")
-                    if st.button("수정 완료", key=f"btn_confirm_mmemo_{m_id}"):
-                        memo_lines[e_idx] = mod_line
-                        members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "memo"] = "\n".join(memo_lines)
-                        save_members(members)
-                        del st.session_state[f"edit_mmemo_target_{m_id}"]
-                        st.toast("메모가 수정되었습니다.")
-                        rerun()
+            if not blocks:
+                st.caption("기록된 과거 메모가 없습니다.")
             else:
-                st.caption("기록된 메모 히스토리가 없습니다.")
+                for b_idx, block in enumerate(blocks):
+                    st.markdown(f"""
+                    <div style="background:#FFFFFF; border:1px solid #CBD5E1; border-radius:10px; padding:12px; margin-bottom:8px;">
+                        <div style="font-weight:800; color:#2563EB; font-size:13px; margin-bottom:4px;">📌 {block['stamp']}</div>
+                        <div style="font-size:13.5px; color:#1E293B; white-space:pre-wrap;">{block['body']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-        # [개선] 잘한점/보완점 제거 후 출결 중심 뱃지형 UI 노출
+                    btn_m1, btn_m2, _ = st.columns([0.8, 0.8, 3.4])
+                    if btn_m1.button("✏️ 수정", key=f"edit_m_blk_{m_id}_{b_idx}"):
+                        st.session_state[f"editing_m_blk_{m_id}"] = b_idx
+                    if btn_m2.button("🗑️ 삭제", key=f"del_m_blk_{m_id}_{b_idx}"):
+                        blocks.pop(b_idx)
+                        members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "memo"] = rebuild_memo_text(blocks)
+                        save_members(members)
+                        st.toast("해당 메모 카드가 삭제되었습니다.")
+
+                    if st.session_state.get(f"editing_m_blk_{m_id}") == b_idx:
+                        mod_body = st.text_area("메모 내용 수정", value=block['body'], key=f"input_mod_m_{m_id}_{b_idx}")
+                        if st.button("수정 완료 저장", key=f"btn_save_mod_m_{m_id}_{b_idx}"):
+                            blocks[b_idx]['body'] = mod_body
+                            members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "memo"] = rebuild_memo_text(blocks)
+                            save_members(members)
+                            del st.session_state[f"editing_m_blk_{m_id}"]
+                            st.toast("메모가 수정되었습니다!")
+
+        # 출결 중심 뱃지형 UI 노출
         with m_tab2:
             m_logs = logs[pd.to_numeric(logs["member_id"], errors="coerce") == m_id].sort_values("date", ascending=False)
             if m_logs.empty:
@@ -811,7 +840,6 @@ if hasattr(st, "dialog"):
                 members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "is_exp_configured"] = 1
                 save_members(members)
                 st.toast("예상 재등록 금액 설정이 저장되었습니다.")
-                rerun()
 
             st.markdown("---")
             st.markdown("##### ✨ 1:1 맞춤 재등록 AI 상담 스크립트 생성")
@@ -1966,7 +1994,7 @@ def page_journal(members, logs):
 
 
 # =========================================================
-# 9. 페이지: 회원 관리 (모달 다이얼로그 연동)
+# 9. 페이지: 회원 관리
 # =========================================================
 def page_members(members, sales, bookings, logs, reports):
     st.title("👥 회원 관리 & 성비 분석")
