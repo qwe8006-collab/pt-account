@@ -243,7 +243,6 @@ def refine_journal_feedback(text, is_good=True):
     else:
         return f"다음 수업 시 {clean_t} 요소를 생체역학적으로 디테일하게 케어하여 더욱 부상 없이 완벽한 자세 정렬을 만들어 드리겠습니다."
 
-# [오타/변형 오탈자 완전 감지 고도화 엔진]
 def refine_raw_text(text, category="general"):
     if not text or not str(text).strip():
         return "특별한 관절 기능 제한 없음 (양호)"
@@ -264,7 +263,6 @@ def refine_raw_text(text, category="general"):
         clean_p = re.sub(r"(이|가)?\s*(닫혀있으심|닫힘|약하심|약함|부족함|약|하심|있으심|있음|보임|같음|관찰됨|유지함|사용함|사용미숙|미숙|활용미숙|활용x|안됨)$", "", p).strip()
 
         if category == "posture":
-            # 라운드숄더/라운드쇼더/라운드 쇼더/어깨말림 등 모든 오타 매칭
             if re.search(r"라운드|쇼더|숄더|쇼드|숄드|말린|굽은|어깨말|어개말|어깨\s*말|어개\s*말", p):
                 refined_phrases.append("상지교차증후군(Upper Crossed Syndrome) 양상의 라운드 숄더 및 견갑골 회전 말림")
             elif re.search(r"골반전|전방경사|전뱅경사|전방\s*경사|요추전만|허리\s*꺾", p):
@@ -782,7 +780,6 @@ if hasattr(st, "dialog"):
                 save_consultations(consultations)
                 st.toast("개별 예상 금액 설정이 저장되었습니다!")
 
-        # 정식 회원 이관 시 '기존 회원 재등록 주차별 관리' 탭으로 자동 이관 연동
         with d_tab3:
             if not is_conv:
                 st.markdown("##### 💳 실제 결제 세션/단가 지정 후 정식 회원 확정 이관")
@@ -995,7 +992,7 @@ if hasattr(st, "dialog"):
 
 
 # =========================================================
-# 6. 페이지 1: 센터 대시보드 (회원명 인라인 나란히 정렬 레이아웃)
+# 6. 페이지 1: 센터 대시보드 (회원명 버튼 클릭 시 상세케어 오픈 구조)
 # =========================================================
 def page_dashboard(members, logs, sales, reports, bookings):
     st.title("📊 PT Account 통합 대시보드")
@@ -1281,30 +1278,24 @@ def page_dashboard(members, logs, sales, reports, bookings):
                 att_badge = get_attendance_badge_html(att_status)
                 rem_badge = f'<span class="rem-badge">⏳ 잔여 {rem_s}회</span>'
 
-                # 회원명 + 성별 + 잔여 세션 + 출석 상태 인라인 완벽 일직선 수평 정렬
+                # [수정 반영] 회원명 클릭 시 케어상세 모달이 바로 열리도록 회원명에 버튼 탑재
                 st.markdown(f'<div style="background:#F8FAFC; border-left:4px solid {COLOR_BLUE}; border-radius:10px; padding:10px 18px; margin-bottom:6px;">', unsafe_allow_html=True)
                 
-                col_d_left, col_d_right = st.columns([4.2, 1.2])
+                col_d_name_btn, col_d_badges, col_d_time = st.columns([1.8, 2.7, 1.2])
 
-                with col_d_left:
-                    st.markdown(f"""
-                    <div style="display:flex; align-items:center; gap:10px; flex-wrap:nowrap;">
-                        <span style="font-size:16px; font-weight:800; color:{COLOR_NAVY}; white-space:nowrap;">👤 {m_name} 회원님</span>
-                        {g_badge} {rem_badge} {att_badge}
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                with col_d_right:
-                    st.markdown(f"<div style='font-weight:800; font-size:15px; color:{COLOR_BLUE}; text-align:right;'>⏰ {s_time} ~ {e_time}</div>", unsafe_allow_html=True)
-
-                st.markdown('</div>', unsafe_allow_html=True)
-
-                col_dash_m1, _ = st.columns([1.8, 3.2])
-                with col_dash_m1:
-                    if st.button(f"🔍 {m_name} 회원 케어상세 열기", key=f"dash_m_dlg_direct_btn_{m_id}_{idx}_{s_time}"):
+                with col_d_name_btn:
+                    if st.button(f"👤 {m_name} 회원님", key=f"dash_m_dlg_direct_btn_{m_id}_{idx}_{s_time}", use_container_width=True):
                         m_row_target = members[members["member_id"].astype(str) == str(m_id)].iloc[0]
                         if hasattr(st, "dialog"):
                             show_member_dialog(m_row_target, members, logs, inbody_df, logs, day_bookings)
+
+                with col_d_badges:
+                    st.markdown(f"<div style='padding-top:6px; display:flex; align-items:center; gap:8px;'>{g_badge} {rem_badge} {att_badge}</div>", unsafe_allow_html=True)
+
+                with col_d_time:
+                    st.markdown(f"<div style='font-weight:800; font-size:15px; color:{COLOR_BLUE}; text-align:right; padding-top:6px;'>⏰ {s_time} ~ {e_time}</div>", unsafe_allow_html=True)
+
+                st.markdown('</div>', unsafe_allow_html=True)
 
                 if is_today_kst:
                     btn_c1, btn_c2, btn_c3, btn_c4 = st.columns([1, 1, 1, 1])
@@ -1551,7 +1542,6 @@ def page_consultations(consultations, members, sales, logs):
 
     main_m_tab1, main_m_tab2 = st.tabs(["💡 신규 상담 고객 관리", "🎯 기존 회원 재등록 주차별 관리"])
 
-    # === [서브 탭 1: 신규 상담 고객 관리] ===
     with main_m_tab1:
         st.markdown("##### ➕ 신규 오프라인/온라인 상담 고객 등록")
         
@@ -1579,7 +1569,6 @@ def page_consultations(consultations, members, sales, logs):
                 c_expect_val = str(c.get("expect_status", "확인중")).strip()
                 expect_badge_color_html = get_expect_badge_html(c_expect_val)
 
-                # [수정 반영 3] 이탈 고르는 즉시 '🔴 상담 이탈' 연동 표출
                 if is_conv:
                     conv_tag = '<b style="color:#166534;">🟢 회원 등록 완료</b>'
                 elif c_expect_val == "이탈":
@@ -1924,7 +1913,7 @@ def page_bodyplan(members, reports):
 
 
 # =========================================================
-# 9. 페이지: 수업일지 작성 (일 1회 작성 제약 및 히스토리 수정/삭제 파이프라인 신설)
+# 9. 페이지: 수업일지 작성
 # =========================================================
 def page_journal(members, logs):
     st.title("📝 수업일지 작성 & 카톡 전송")
