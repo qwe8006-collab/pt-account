@@ -398,8 +398,41 @@ def next_id(df, id_col):
     return int(pd.to_numeric(df[id_col], errors="coerce").fillna(0).max()) + 1
 
 
+# [오류 해결 핵심] 회원 전송용 메시지 생성 함수 방어적 보완
+def generate_friendly_message_from_data(member_id, member_name, rem_sessions, exercises_df, good, improve):
+    trainer_title_name = MY_NAME
+    ex_summary = []
+    
+    if isinstance(exercises_df, pd.DataFrame) and not exercises_df.empty:
+        for _, row in exercises_df.iterrows():
+            item = str(row.get("종목", "")).strip()
+            if item:
+                w = safe_float(row.get("중량(kg)", 0))
+                c = int(safe_float(row.get("횟수", 0)))
+                s = int(safe_float(row.get("세트", 0)))
+                ex_summary.append(f"  • {item}: {w}kg x {c}회 x {s}세트")
+
+    ex_text = "\n".join(ex_summary) if ex_summary else "  • 전신 기초 가동성 및 코어 훈련"
+    g_text = good if good else "오늘도 설정한 운동 목표 루틴을 깔끔하게 완수하셨습니다!"
+    i_text = improve if improve else "다음 수업 때는 자세 정렬에 조금 더 신경 써볼게요."
+
+    return f"""안녕하세요 {member_name} 회원님! 오늘 PT 수업도 고생 많으셨습니다. 💪
+
+[오늘 진행한 운동 루틴]
+{ex_text}
+
+[트레이너 피드백]
+✔ 잘하신 점: {g_text}
+✔ 보완할 점: {i_text}
+
+⏳ 남은 세션: {rem_sessions}회
+
+오늘도 고생하셨습니다! 다음 수업 때도 화이팅입니다! 🔥
+- 담당 트레이너 {trainer_title_name} 올림 -"""
+
+
 # =========================================================
-# 4. HTML 렌더러
+# 4. 3-STEP 바이오 프로파일 HTML 생성기 (완벽 방어형)
 # =========================================================
 def build_4step_report_html(member, report):
     m_dict = {}
@@ -1331,7 +1364,6 @@ def page_consultations(consultations, members, sales, logs):
     today = get_kst_now().date()
     curr_weeks = get_month_weeks_list(today.year, today.month)
 
-    # 1. 신규 상담 수동 세팅 기반 예상 매출 단순 합계
     unconverted_consults = consultations[consultations["converted"] != True]
     
     consult_pipeline_amount = 0
@@ -1343,7 +1375,6 @@ def page_consultations(consultations, members, sales, logs):
         if c_st in ["높음", "중간", "확인중"] and c_exp_s > 0 and c_exp_p > 0:
             consult_pipeline_amount += (c_exp_s * c_exp_p)
 
-    # 2. 기존 회원 재등록 예상 매출 단순 합계
     re_pipeline_amount = 0
     re_high_amount = 0
 
@@ -1392,7 +1423,6 @@ def page_consultations(consultations, members, sales, logs):
 
     st.write("")
 
-    # 상단 분석 차트 탭
     st.markdown('<div class="pt-card">', unsafe_allow_html=True)
     st.subheader(f"📊 {today.year}년 {today.month}월 상담 & 재등록 파이프라인 동향")
     
@@ -1459,10 +1489,8 @@ def page_consultations(consultations, members, sales, logs):
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # 메인 관리 서브 탭
     main_m_tab1, main_m_tab2 = st.tabs(["💡 신규 상담 고객 관리", "🎯 기존 회원 재등록 주차별 관리"])
 
-    # === [서브 탭 1: 신규 상담 고객 관리] ===
     with main_m_tab1:
         st.markdown("##### ➕ 신규 오프라인/온라인 상담 고객 등록")
         
@@ -1534,7 +1562,6 @@ def page_consultations(consultations, members, sales, logs):
 
                 st.markdown('</div>', unsafe_allow_html=True)
 
-    # === [서브 탭 2: 기존 회원 재등록 주차별 관리] ===
     with main_m_tab2:
         st.subheader("✏️ 기존 회원 주차별 재등록 예상가 및 1:1 메모/상담 케어")
         week_options_dynamic = ["전월이월"] + curr_weeks + ["노카테고리", "전월이탈"]
