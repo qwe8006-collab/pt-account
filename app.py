@@ -337,6 +337,17 @@ def get_gender_badge_html(gender):
     return '<span style="color:#64748B;">성별미기재</span>'
 
 
+def get_expect_badge_html(expect_status):
+    st_str = str(expect_status).strip() if pd.notna(expect_status) else ""
+    if st_str == "높음":
+        return '<span class="tr-high">🟢 높음</span>'
+    elif st_str == "중간":
+        return '<span class="tr-mid">🟡 중간</span>'
+    elif st_str in ["낮음", "이탈"]:
+        return '<span class="tr-low">🔴 낮음/이탈</span>'
+    return '<span class="tr-check">❔ 확인중</span>'
+
+
 def get_attendance_badge_html(status):
     st_str = str(status).strip() if pd.notna(status) else ""
     if st_str in ["출석", "출석 완료"]:
@@ -370,6 +381,64 @@ def parse_memo_blocks(raw_text):
 
 def rebuild_memo_text(blocks):
     return "\n\n".join([f"{b['stamp']}\n{b['body']}".strip() for b in blocks]).strip()
+
+
+def build_4step_report_html(target_m, r_dict):
+    """3-STEP 바이오 프로파일 미리보기용 HTML 리포트 생성"""
+    m_name = target_m.get("name", "회원")
+    m_goal = r_dict.get("goal_text") or target_m.get("goal", "다이어트 및 체형교정")
+    
+    analysis_text = (r_dict.get("analysis_text") or "분석 데이터가 없습니다.").replace("\n", "<br>")
+    p1_text = (r_dict.get("phase1_text") or "-").replace("\n", "<br>")
+    p2_text = (r_dict.get("phase2_text") or "-").replace("\n", "<br>")
+    p3_text = (r_dict.get("phase3_text") or "-").replace("\n", "<br>")
+    comment_text = (r_dict.get("trainer_comment") or "-").replace("\n", "<br>")
+    
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <style>
+            body {{ font-family: -apple-system, sans-serif; padding: 20px; background-color: #F8FAFC; color: #0F172A; }}
+            .container {{ background: #FFFFFF; border-radius: 16px; padding: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }}
+            .header {{ border-bottom: 2px solid #2563EB; padding-bottom: 12px; margin-bottom: 20px; }}
+            .title {{ font-size: 22px; font-weight: 800; color: #1E293B; }}
+            .section {{ margin-bottom: 20px; padding: 16px; background: #EFF6FF; border-radius: 12px; border-left: 4px solid #2563EB; }}
+            .section-title {{ font-size: 16px; font-weight: 800; color: #2563EB; margin-bottom: 8px; }}
+            .content {{ font-size: 14px; line-height: 1.6; color: #334155; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <div class="title">🏋️ {m_name} 회원님 맞춤 3-STEP 바이오 프로파일</div>
+                <div style="font-size:13px; color:#64748B; margin-top:4px;">🎯 핵심 목표: {m_goal}</div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">📊 1. 신체 정밀 종합 분석</div>
+                <div class="content">{analysis_text}</div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">🚀 2. 3-STEP 맞춤 트레이닝 로드맵</div>
+                <div class="content">
+                    <b>STEP 1 (1~4주차):</b><br>{p1_text}<br><br>
+                    <b>STEP 2 (5~8주차):</b><br>{p2_text}<br><br>
+                    <b>STEP 3 (9~12주차):</b><br>{p3_text}
+                </div>
+            </div>
+            
+            <div class="section" style="background:#F1F5F9; border-left-color:#64748B;">
+                <div class="section-title" style="color:#475569;">💌 3. 담당 트레이너 코멘트</div>
+                <div class="content">{comment_text}</div>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return html_content
 
 
 # =========================================================
@@ -784,7 +853,6 @@ if hasattr(st, "dialog"):
         total = int(pd.to_numeric(m.get("total_sessions", 0), errors="coerce"))
         rem = int(pd.to_numeric(m.get("remaining_sessions", 0), errors="coerce"))
         
-        # [수정] m_gender/m_tr_expect 안전성 보완
         m_gender = m.get("gender") if hasattr(m, 'get') else m["gender"]
         m_tr_exp = m.get("tr_expect") if hasattr(m, 'get') else m["tr_expect"]
         
@@ -1656,7 +1724,6 @@ def page_bodyplan(members, reports):
         else:
             rep_status_html = '<b style="color:#DC2626;">🔴 미작성</b>'
 
-        # [수정 100% 완전 보완] Series 객체 m에서 gender 컬럼을 안전하게 취득하여 g_badge 생성
         m_gender_val = m.get("gender") if hasattr(m, 'get') else m["gender"]
         g_badge = get_gender_badge_html(m_gender_val)
 
@@ -2144,7 +2211,6 @@ def page_members(members, sales, bookings, logs, reports):
             done = max(0, total - rem)
             has_memo = pd.notna(m.get("memo")) and str(m.get("memo")).strip() != ""
             
-            # [수정] m_gender 안전성 보완
             m_gender_val = m.get("gender") if hasattr(m, 'get') else m["gender"]
             gender_badge = get_gender_badge_html(m_gender_val)
 
