@@ -596,7 +596,7 @@ def get_attendance_badge_html(status):
 
 
 # =========================================================
-# 3. Streamlit @st.dialog 기반 팝업 모달 정의 (단일 카드형 메모 & 대시보드 출결 전용 이력 연동)
+# 3. Streamlit @st.dialog 기반 팝업 모달 정의 (말줄임표 완전히 제거된 명확한 수정/삭제 버튼)
 # =========================================================
 
 # A. 상담 고객 상세 모달 팝업
@@ -646,10 +646,11 @@ if hasattr(st, "dialog"):
                     </div>
                     """, unsafe_allow_html=True)
 
-                    btn_c1, btn_c2, _ = st.columns([0.8, 0.8, 3.4])
-                    if btn_c1.button("✏️ 수정", key=f"edit_c_blk_{c_id}_{b_idx}"):
+                    # [수정] 말줄임표 제거용 명확한 버블 버튼 레이아웃
+                    btn_c1, btn_c2, _ = st.columns([1.5, 1.5, 2.0])
+                    if btn_c1.button("✏️ 수정하기", key=f"edit_c_blk_{c_id}_{b_idx}"):
                         st.session_state[f"editing_c_blk_{c_id}"] = b_idx
-                    if btn_c2.button("🗑️ 삭제", key=f"del_c_blk_{c_id}_{b_idx}"):
+                    if btn_c2.button("🗑️ 삭제하기", key=f"del_c_blk_{c_id}_{b_idx}"):
                         blocks.pop(b_idx)
                         consultations.loc[consultations["consult_id"] == c_id, "memo"] = rebuild_memo_text(blocks)
                         save_consultations(consultations)
@@ -732,7 +733,7 @@ if hasattr(st, "dialog"):
                     save_consultations(consultations)
                     st.toast("상담 상태가 '상담 진행중'으로 초기화되었습니다.")
 
-# B. 기존 회원 상세 모달 팝업 (대시보드 절대 출결 이력만 오롯이 연동)
+# B. 기존 회원 상세 모달 팝업 (대시보드 절대 출결 이력만 오롯이 연동 가져옴)
 if hasattr(st, "dialog"):
     @st.dialog("👤 회원통합 상세 케어 모달")
     def show_member_dialog(m, members, logs, inbody_df, logs_df, bookings_df=None):
@@ -780,10 +781,11 @@ if hasattr(st, "dialog"):
                     </div>
                     """, unsafe_allow_html=True)
 
-                    btn_m1, btn_m2, _ = st.columns([0.8, 0.8, 3.4])
-                    if btn_m1.button("✏️ 수정", key=f"edit_m_blk_{m_id}_{b_idx}"):
+                    # [수정] 말줄임표 제거용 명확한 버블 버튼 레이아웃
+                    btn_m1, btn_m2, _ = st.columns([1.5, 1.5, 2.0])
+                    if btn_m1.button("✏️ 수정하기", key=f"edit_m_blk_{m_id}_{b_idx}"):
                         st.session_state[f"editing_m_blk_{m_id}"] = b_idx
-                    if btn_m2.button("🗑️ 삭제", key=f"del_m_blk_{m_id}_{b_idx}"):
+                    if btn_m2.button("🗑️ 삭제하기", key=f"del_m_blk_{m_id}_{b_idx}"):
                         blocks.pop(b_idx)
                         members.loc[pd.to_numeric(members["member_id"], errors="coerce") == m_id, "memo"] = rebuild_memo_text(blocks)
                         save_members(members)
@@ -798,7 +800,7 @@ if hasattr(st, "dialog"):
                             del st.session_state[f"editing_m_blk_{m_id}"]
                             st.toast("메모가 수정되었습니다!")
 
-        # [수정 완료] 수업일지(logs)가 아닌 대시보드 스케줄(bookings) 출결 기록만 오롯이 연동 가져옴
+        # 대시보드 스케줄(bookings) 출결 기록만 오롯이 연동 가져옴
         with m_tab2:
             current_bookings = bookings_df if bookings_df is not None else st.session_state.get("bookings_df", fetch_table("bookings", BOOKINGS_COLUMNS))
             m_bookings = current_bookings[
@@ -806,7 +808,6 @@ if hasattr(st, "dialog"):
                 (current_bookings["status"] != "취소")
             ].sort_values("date", ascending=False)
 
-            # 출결 상태를 알려주는 logs 테이블 정보 매칭
             m_logs = logs[pd.to_numeric(logs["member_id"], errors="coerce") == m_id]
 
             if m_bookings.empty:
@@ -892,7 +893,7 @@ if hasattr(st, "dialog"):
 
 
 # =========================================================
-# 4. 페이지 1: 센터 대시보드
+# 4. 페이지 1: 센터 대시보드 (회원명 클릭 시 모달 연동 & 빨간 메모 태그 삭제)
 # =========================================================
 def page_dashboard(members, logs, sales, reports, bookings):
     st.title("📊 PT Account 통합 대시보드")
@@ -1141,7 +1142,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
     if day_bookings.empty:
         st.info(f"{sel_date_str}에 예정된 수업 예약이 없습니다.")
     else:
-        merged_day_b = day_bookings.merge(members[["member_id", "name", "gender", "total_sessions", "remaining_sessions", "memo", "survey_json"]], on="member_id", how="inner")
+        merged_day_b = day_bookings.merge(members, on="member_id", how="inner")
         
         if merged_day_b.empty:
             st.info(f"{sel_date_str}에 예정된 수업 예약이 없습니다.")
@@ -1149,6 +1150,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
             st.success(f"총 **{len(merged_day_b)}개**의 수업이 예약되어 있습니다.")
 
             is_today_kst = (sel_date_str == today_str)
+            inbody_df = st.session_state.get("inbody_df", fetch_table("inbody", INBODY_COLUMNS))
 
             for idx, b_row in merged_day_b.sort_values("time_slot").iterrows():
                 b_id = b_row["booking_id"]
@@ -1160,19 +1162,6 @@ def page_dashboard(members, logs, sales, reports, bookings):
                 m_name = b_row.get("name") or "회원"
                 m_gender = b_row.get("gender") or "남성"
                 rem_s = int(b_row.get("remaining_sessions", 0))
-                
-                m_memo = str(b_row.get("memo") or "").strip()
-                try:
-                    s_dict = json.loads(b_row.get("survey_json") or "{}")
-                    s_pain = s_dict.get("pain", "").strip()
-                except Exception:
-                    s_pain = ""
-                
-                caution_text = ""
-                if s_pain: caution_text = f"🩺 통증: {s_pain}"
-                elif m_memo: caution_text = f"💬 메모: {m_memo[:15]}..."
-
-                caution_html = f'<span style="background:#FEF2F2; color:#DC2626; padding:2px 8px; border-radius:10px; font-size:12px; font-weight:800; border:1px solid #FECDD3; margin-left:6px;">{caution_text}</span>' if caution_text else ""
                 
                 m_log = logs[
                     (logs["date"].astype(str) == sel_date_str) & 
@@ -1193,8 +1182,8 @@ def page_dashboard(members, logs, sales, reports, bookings):
                 st.markdown(f"""
                 <div style="background:#F8FAFC; border-left:4px solid {COLOR_BLUE}; border-radius:10px; padding:14px 20px; margin-bottom:8px;">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <div>
-                            <span style="font-size:17px; font-weight:800; color:{COLOR_NAVY};">👤 {m_name} 회원님</span> {g_badge} {rem_badge} {att_badge} {caution_html}
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="font-size:17px; font-weight:800; color:{COLOR_NAVY};">👤 {m_name} 회원님</span> {g_badge} {rem_badge} {att_badge}
                         </div>
                         <div style="font-weight:800; font-size:15px; color:{COLOR_BLUE};">
                             ⏰ {s_time} ~ {e_time}
@@ -1202,6 +1191,14 @@ def page_dashboard(members, logs, sales, reports, bookings):
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
+
+                # [수정] 대시보드 스케줄 카드 내 회원명 클릭 시 팝업 모달 연동
+                col_dash_m1, col_dash_m2 = st.columns([1.5, 3.5])
+                with col_dash_m1:
+                    if st.button(f"👤 {m_name} 회원 케어 팝업 열기", key=f"dash_m_dlg_btn_{m_id}_{idx}_{s_time}"):
+                        m_row_target = members[members["member_id"].astype(str) == str(m_id)].iloc[0]
+                        if hasattr(st, "dialog"):
+                            show_member_dialog(m_row_target, members, logs, inbody_df, logs, day_bookings)
 
                 if is_today_kst:
                     btn_c1, btn_c2, btn_c3, btn_c4 = st.columns([1, 1, 1, 1])
@@ -1450,10 +1447,11 @@ def page_consultations(consultations, members, sales, logs):
     # 메인 관리 서브 탭
     main_m_tab1, main_m_tab2 = st.tabs(["💡 신규 상담 고객 관리", "🎯 기존 회원 재등록 주차별 관리"])
 
-    # === [서브 탭 1: 신규 상담 고객 관리 (전체 인테이크 설문 내장)] ===
+    # === [서브 탭 1: 신규 상담 고객 관리 (기본 접힘 expanded=False 적용)] ===
     with main_m_tab1:
         st.markdown("##### ➕ 신규 오프라인/온라인 상담 고객 등록")
-        with st.expander("📝 신규 상담 & 인테이크 설문 등록 폼 열기", expanded=True):
+        # [수정] 항시 접혀있도록 expanded=False 설정
+        with st.expander("📝 신규 상담 & 인테이크 설문 등록 폼 열기", expanded=False):
             with st.form("consult_form", clear_on_submit=True):
                 st.markdown("###### **1. 기본 인적사항 & 상담 가능성**")
                 cc1, cc2, cc3 = st.columns(3)
@@ -1881,7 +1879,6 @@ def page_journal(members, logs):
         st.info("회원을 먼저 등록해 주세요.")
         return
 
-    # [수정] 방금 막 수업을 마쳤거나 가장 최근 예약된 회원을 자동 감지하여 드롭다운 1순위 세팅
     kst_now = get_kst_now()
     today_str = kst_now.date().isoformat()
     now_hm = kst_now.strftime("%H:%M")
@@ -1891,7 +1888,6 @@ def page_journal(members, logs):
     active_b = bookings_df[(bookings_df["status"] != "취소") & (bookings_df["date"] == today_str)]
 
     if not active_b.empty:
-        # 현재 시각보다 같거나 직전에 시작한 스케줄 정렬
         past_today_b = active_b[active_b["time_slot"] <= now_hm].sort_values("time_slot", ascending=False)
         if not past_today_b.empty:
             target_m_id = str(past_today_b.iloc[0]["member_id"])
