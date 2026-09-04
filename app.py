@@ -18,7 +18,7 @@ import streamlit.components.v1 as components
 from supabase import create_client, Client
 
 # =========================================================
-# [최상단 고정 1] 글로벌 상수 & 설정 (NameError 원천 차단)
+# [최상단 고정 1] 글로벌 상수 & 설정
 # =========================================================
 MY_NAME = "김준수"
 COLOR_NAVY = "#1E293B"
@@ -243,12 +243,70 @@ def refine_journal_feedback(text, is_good=True):
     else:
         return f"다음 수업 시 {clean_t} 요소를 생체역학적으로 디테일하게 케어하여 더욱 부상 없이 완벽한 자세 정렬을 만들어 드리겠습니다."
 
+# [고도화] 피트니스 전문 정밀 파싱 알고리즘 엔진
 def refine_raw_text(text, category="general"):
-    if not text or not str(text).strip(): return "미입력 (기본 평가 데이터 없음)"
+    if not text or not str(text).strip():
+        return "특별한 기능 제한 없음 (양호)"
+
     t = str(text).strip()
-    clean_t = re.sub(r"(이|가)?\s*(닫혀있으심|닫힘|약하심|약함|부족함|약|하심|있으심|있음|보임|같음|패턴가|패턴이)$", "", t).strip()
-    clean_t = re.sub(r"\s+", " ", clean_t)
-    return clean_t
+
+    # 1. 카테고리: 운동 목적
+    if category == "goal":
+        if re.search(r"벌크업|근육|증량|근성장", t):
+            return "점진적 과부하 트레이닝을 통한 골격근량 증대 및 체격 확장(벌크업)"
+        elif re.search(r"다이어트|체지방|감량|체중", t):
+            return "체지방 순감량 및 골격근량 보존을 통한 신체 밸런스 라인 형성"
+        elif re.search(r"교정|체형|자세|재활", t):
+            return "불균형 관절 정렬 복원 및 생체역학적 기능성 수축 기능 회복"
+        return f"{t} 및 신체 전반의 기능적 밸런스 회복"
+
+    # 구절 단위 분리 (쉼표, 점, Slash 기준)
+    phrase_list = [p.strip() for p in re.split(r"[,/.\n]+", t) if p.strip()]
+    refined_phrases = []
+
+    for p in phrase_list:
+        clean_p = re.sub(r"(이|가)?\s*(닫혀있으심|닫힘|약하심|약함|부족함|약|하심|있으심|있음|보임|같음|관찰됨|보임|유지함|사용함|사용미숙|미숙|활용미숙|활용x|안됨)$", "", p).strip()
+
+        # 2. 카테고리: 자세 정밀 체크
+        if category == "posture":
+            if re.search(r"라운드\s*숄더|말린\s*어깨|굽은\s*어깨|어깨말림", p):
+                refined_phrases.append("상지교차증후군(Upper Crossed Syndrome) 양상의 라운드 숄더 및 견갑골 말림")
+            elif re.search(r"전방\s*경사|골반전방|허리 꺾임|요추전만", p):
+                refined_phrases.append("골반 전방 경사(Pelvic Anterior Tilt)에 따른 요추 과전만 패턴")
+            elif re.search(r"후방\s*경사|골반후방|플랫백|굽은허리", p):
+                refined_phrases.append("골반 후방 경사(Pelvic Posterior Tilt)에 따른 요·흉추 후만 양상")
+            elif re.search(r"거북목|일자목|목통증", p):
+                refined_phrases.append("경추 전만 소실 및 경추부 방사통을 유발하는 거북목 패턴")
+            elif re.search(r"측만|불균형|어깨높이|골반높이", p):
+                refined_phrases.append("좌우 관절 정렬 비대칭 및 체중 중심축 편차 양상")
+            else:
+                refined_phrases.append(f"{clean_p} 관련 관절 정렬 편차 관찰")
+
+        # 3. 카테고리: 움직임/기능 체크
+        elif category == "func":
+            if re.search(r"횡격막|호흡|복압|숨|호흡미숙", p):
+                refined_phrases.append("호흡 수행 시 횡격막(Diaphragm) 수축 미숙 및 코어 복압(IAP) 형성 가동성 저하")
+            elif re.search(r"측면\s*사슬|측면|외측사슬|측면사슬", p):
+                refined_phrases.append("동적 움직임 시 측면 운동 사슬(Lateral Kinetic Chain) 및 중둔근 활성화 제한")
+            elif re.search(r"견갑|견갑골|익상|상방회전|하향회전|견갑닫힘", p):
+                refined_phrases.append("견갑골 동적 안정성 저하 및 상방/하방 회전 모션의 가동성 제한")
+            elif re.search(r"고관절|굴근|장요근|내전근", p):
+                refined_phrases.append("고관절 복합체(Hip Complex) 가동 범위 제한 및 내전근 활성도 약화")
+            elif re.search(r"벗윙크|스쿼트|말림", p):
+                refined_phrases.append("딥 스쿼트 패턴 시 고관절 굴곡 제한에 따른 벗윙크(Butt Wink) 보상 작용")
+            elif re.search(r"지면|접지|발바닥|아치", p):
+                refined_phrases.append("하체 하중 지지 시 발바닥 족궁(Arch) 접지 및 지면 반발력 전달 제한")
+            else:
+                refined_phrases.append(f"{clean_p} 동작 수행 시 특정 보상 작용 및 움직임 제한 소견")
+
+        # 4. 카테고리: 1회차 수업/운동일지
+        elif category == "journal":
+            refined_phrases.append(f"{clean_p} 중심의 기초 관절 정렬 및 동작 지도")
+
+        else:
+            refined_phrases.append(clean_p)
+
+    return " / ".join(refined_phrases) if refined_phrases else t
 
 def get_gender_badge_html(gender):
     g_str = str(gender).strip() if pd.notna(gender) else ""
@@ -398,41 +456,8 @@ def next_id(df, id_col):
     return int(pd.to_numeric(df[id_col], errors="coerce").fillna(0).max()) + 1
 
 
-# [오류 해결 핵심] 회원 전송용 메시지 생성 함수 방어적 보완
-def generate_friendly_message_from_data(member_id, member_name, rem_sessions, exercises_df, good, improve):
-    trainer_title_name = MY_NAME
-    ex_summary = []
-    
-    if isinstance(exercises_df, pd.DataFrame) and not exercises_df.empty:
-        for _, row in exercises_df.iterrows():
-            item = str(row.get("종목", "")).strip()
-            if item:
-                w = safe_float(row.get("중량(kg)", 0))
-                c = int(safe_float(row.get("횟수", 0)))
-                s = int(safe_float(row.get("세트", 0)))
-                ex_summary.append(f"  • {item}: {w}kg x {c}회 x {s}세트")
-
-    ex_text = "\n".join(ex_summary) if ex_summary else "  • 전신 기초 가동성 및 코어 훈련"
-    g_text = good if good else "오늘도 설정한 운동 목표 루틴을 깔끔하게 완수하셨습니다!"
-    i_text = improve if improve else "다음 수업 때는 자세 정렬에 조금 더 신경 써볼게요."
-
-    return f"""안녕하세요 {member_name} 회원님! 오늘 PT 수업도 고생 많으셨습니다. 💪
-
-[오늘 진행한 운동 루틴]
-{ex_text}
-
-[트레이너 피드백]
-✔ 잘하신 점: {g_text}
-✔ 보완할 점: {i_text}
-
-⏳ 남은 세션: {rem_sessions}회
-
-오늘도 고생하셨습니다! 다음 수업 때도 화이팅입니다! 🔥
-- 담당 트레이너 {trainer_title_name} 올림 -"""
-
-
 # =========================================================
-# 4. 3-STEP 바이오 프로파일 HTML 생성기 (완벽 방어형)
+# 4. 3-STEP 바이오 프로파일 HTML 생성기
 # =========================================================
 def build_4step_report_html(member, report):
     m_dict = {}
@@ -1629,7 +1654,7 @@ def page_consultations(consultations, members, sales, logs):
 
 
 # =========================================================
-# 8. 페이지: 3-STEP 바이오 프로파일
+# 8. 페이지: 3-STEP 바이오 프로파일 (피트니스 정밀 생성 엔진 강화)
 # =========================================================
 def page_bodyplan(members, reports):
     st.title("📋 PT 3-STEP 바이오 프로파일 (AI 고도화 처방)")
@@ -1740,61 +1765,52 @@ def page_bodyplan(members, reports):
         goal_input = st.text_input(
             "🎯 회원 운동 목적", 
             value=r_row.get("goal_text") if has_existing else (selected_m.get("goal") or ""),
-            placeholder="예시: 벌크업, 다이어트 및 체형교정",
+            placeholder="예시: 다이어트 및 체형교정",
             key=f"input_goal_{e_id}"
         )
         raw_journal = st.text_input(
             "1. 1회차 수업 진행 내용 (운동일지 메모)", 
-            placeholder="예시: 할로우테스트 및 스쿼트 정렬 지도",
+            placeholder="예시: 호흡인식 및 하체운동, 체중중심 체크",
             key=f"input_journal_{e_id}"
         )
         raw_posture = st.text_input(
             "2. 자세 체크 결과", 
-            placeholder="예시: 골반 전방경사 패턴 관찰",
+            placeholder="예시: 라운드숄더관찰, 골반전방경사 보유중",
             key=f"input_posture_{e_id}"
         )
         raw_func = st.text_input(
             "3. 움직임 체크 결과", 
-            placeholder="예시: 렛풀다운 시 오른쪽 견갑만 닫혀있으심",
+            placeholder="예시: 호흡시 횡격막근 사용 미숙, 측면사슬 활용x",
             key=f"input_func_{e_id}"
         )
 
+        # [고도화 반영] 피트니스 전문 정제 생성 버튼 알고리즘
         if st.button("🤖 전문 톤앤매너 맞춤 가이드 & 장문 코멘트 자동 생성", type="primary", key=f"btn_ai_gen_{e_id}"):
             refined_goal = refine_raw_text(goal_input, "goal")
             refined_journal = refine_raw_text(raw_journal, "journal")
             refined_posture = refine_raw_text(raw_posture, "posture")
             refined_func = refine_raw_text(raw_func, "func")
 
-            details_list = []
-            if raw_posture.strip(): 
-                details_list.append(f"자세 정밀 평가 결과 {refined_posture}가 관찰되었습니다.")
-            if raw_func.strip(): 
-                details_list.append(f"움직임 기능 검사에서는 {refined_func} 소견이 확인되었습니다.")
-            if raw_journal.strip(): 
-                details_list.append(f"이러한 신체 보상 패턴을 개선하기 위해 진행된 1회차 훈련({refined_journal}) 성과를 바탕으로 단계별 로드맵을 적용합니다.")
+            st.session_state[f"ta_analysis_{e_id}"] = f"""[신체 정밀 종합 바이오 분석]
+{selected_m['name']} 회원님의 정밀 평가 결과, 최우선 개선 목표는 '{refined_goal}'입니다.
 
-            analysis_body = " ".join(details_list) if details_list else "입력된 세부 평가 데이터를 기반으로 맞춤형 개선 플랜을 수립합니다."
+신체 정렬 측면에서는 {refined_posture} 소견이 확인되었습니다. 이로 인한 관절 가동성 제한을 평가한 결과, 움직임 패턴 시 {refined_func} 문제가 관찰되었습니다. 1회차 진행된 훈련({refined_journal})을 시작으로, 생체역학적 보상 작용을 원천 차단하고 목표 주동근의 정밀 고립 수축을 도모하는 단계별 맞춤 케어 로드맵을 적용합니다."""
 
-            st.session_state[f"ta_analysis_{e_id}"] = f"""[신체 정밀 종합 분석]
-{selected_m['name']} 회원님의 정밀 신체 평가 결과, 핵심 개선 과제는 '{refined_goal}'입니다.
-
-{analysis_body}"""
-
-            st.session_state[f"ai_posture_text_{e_id}"] = f"체형 정렬 평가: {refined_posture}"
+            st.session_state[f"ai_posture_text_{e_id}"] = f"자세 정밀 평가: {refined_posture}"
             st.session_state[f"ai_func_text_{e_id}"] = f"동작 가동성 평가: {refined_func}"
 
-            st.session_state[f"ta_p1_{e_id}"] = f"STEP 1 [1-4주차: 관절 이완 & 호흡 정렬 익히기]\n• 타이트해진 근막 이완 및 호흡 정렬\n• 훈련 성과 반영: {refined_journal}"
-            st.session_state[f"ta_p2_{e_id}"] = f"STEP 2 [5-8주차: 타겟 근육 고립 & 차근차근 부하 적용]\n• 보상 작용 없이 주동근 고립 자극 전달\n• 개선 과제 반영: {refined_posture} 케어"
-            st.session_state[f"ta_p3_{e_id}"] = f"STEP 3 [9-12주차: 체력 극대화 & 자율 독립 루틴 완성]\n• 맞춤형 자율 운동 프로그램 체득 및 운동 자립 완성\n• 개선 과제 반영: {refined_func} 예방"
+            st.session_state[f"ta_p1_{e_id}"] = f"STEP 1 [1~4주차: 굳은 관절 이완 & 바른 호흡 정렬 익히기]\n• 타이트해진 관절 주변 근막(Myofascial) 이완 및 횡격막 호흡 정렬 습득\n• {refined_posture} 개선을 위한 기초 코어 복압 및 관절 안정화 훈련"
+            st.session_state[f"ta_p2_{e_id}"] = f"STEP 2 [5~8주차: 타겟 근육 고립 & 차근차근 부하 적용]\n• 보상 작용 없는 타겟 주동근 고립 수축 완성\n• {refined_func} 케어를 위한 점진적 과부하(Overload) 근력 트레이닝"
+            st.session_state[f"ta_p3_{e_id}"] = f"STEP 3 [9~12주차: 체력 및 근지구력 극대화 & 자율 독립 루틴 완성]\n• 전신 운동 사슬(Kinetic Chain) 시너지 강화 및 근지구력 극대화\n• {refined_goal} 달성을 위한 맞춤형 자율 운동 루틴 체득 및 독립 완성"
 
             st.session_state[f"ta_comment_{e_id}"] = f""""{selected_m['name']} 님을 위한 {MY_NAME} 트레이너의 진심 어린 한마디"
 
 {selected_m['name']} 회원님, 담당 트레이너 {MY_NAME}입니다.
-현재 회원님께서 고민하시는 신체 목표나 움직임의 제한은 정확한 생체역학적 원인 분석과 체계적인 로드맵을 통해 충분히 개선할 수 있습니다. 
+오늘 수행하신 평가 데이터를 바탕으로 회원님만을 위한 맞춤 12주 바이오 프로파일 로드맵을 수립했습니다.
 
-준비해 드린 12주 간의 STEP 플랜을 따라 차근차근 나아간다면, 불균형했던 관절 정렬이 제자리를 찾고 한층 새로워진 몸의 변화를 직접 경험하시게 될 것입니다. 저를 믿고 편안한 마음으로 따라와 주세요! 화이팅! 🔥"""
+현재 관찰되는 {refined_posture} 및 {refined_func} 양상은 정확한 원인 분석과 체계적인 단계별 트레이닝을 거친다면 확실하게 개선될 수 있습니다. 준비해 드린 3-STEP 플랜을 차근차근 따라와 주신다면 불균형했던 몸의 정렬이 제자리를 찾고 한층 가볍고 건강해진 변화를 체감하시게 될 것입니다. 저를 믿고 편안한 마음으로 함께 시작해 봐요! 화이팅! 🔥"""
 
-            st.toast("RAW 데이터가 순수하고 전문적으로 정제되어 항목별로 분할 기입되었습니다!")
+            st.toast("💡 Raw 데이터가 전문가 수준의 체계적 피트니스 가이드로 고도화 생성되었습니다!")
             rerun()
 
         default_analysis = r_row.get("analysis_text") if has_existing else ""
@@ -1960,7 +1976,9 @@ def page_journal(members, logs):
     st.markdown("---")
     st.markdown(f"#### 📱 '{member['name']}' 회원 전송용 실시간 통합 메시지")
 
-    live_msg = generate_friendly_message_from_data(m_id, member["name"], rem_sessions_val, edited_df, good_points, improve_points)
+    # [방어적 구동 처리]
+    m_name_str = str(member.get("name") if hasattr(member, "get") else member["name"])
+    live_msg = generate_friendly_message_from_data(m_id, m_name_str, rem_sessions_val, edited_df, good_points, improve_points)
 
     st.code(live_msg, language=None)
 
@@ -1993,11 +2011,11 @@ def page_journal(members, logs):
             rerun()
 
     if st.session_state.get("log_saved_success", False):
-        st.toast(f"🎉 '{member['name']}' 회원의 일지가 정상 등록되었습니다!", icon="✅")
+        st.toast(f"🎉 '{m_name_str}' 회원의 일지가 정상 등록되었습니다!", icon="✅")
         st.session_state["log_saved_success"] = False
 
     st.write("")
-    with st.expander(f"📜 '{member['name']}' 회원의 이전 수업일지 & 피드백 히스토리 복기"):
+    with st.expander(f"📜 '{m_name_str}' 회원의 이전 수업일지 & 피드백 히스토리 복기"):
         m_logs = logs[pd.to_numeric(logs["member_id"], errors="coerce") == m_id].sort_values("date", ascending=False)
         if m_logs.empty:
             st.caption("기록된 과거 수업일지가 없습니다.")
@@ -2443,7 +2461,7 @@ def page_inbody(members, inbody):
 
 
 # =========================================================
-# 12. 메인 라우팅 (하향식 스코프 고정)
+# 12. 메인 라우팅 (하향식 스코프 완벽 적용)
 # =========================================================
 def main():
     members, logs, inbody, sales, reports, bookings, consultations = get_cached_data()
