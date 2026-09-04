@@ -328,15 +328,22 @@ def refine_raw_text(text, category="general"):
     return clean_t
 
 
-def get_expect_badge_html(status_str):
-    st_val = str(status_str).strip()
-    if st_val == "높음":
-        return '<span class="tr-high">🟢 높음</span>'
-    elif st_val == "중간":
-        return '<span class="tr-mid">🟡 중간</span>'
-    elif st_val in ["낮음", "이탈"]:
-        return '<span class="tr-low">🔴 ' + st_val + '</span>'
-    return '<span class="tr-check">❔ 확인중</span>'
+def get_gender_badge_html(gender):
+    g_str = str(gender).strip() if pd.notna(gender) else ""
+    if g_str == "여성":
+        return '<span class="gender-badge-female">👩 여성</span>'
+    elif g_str == "남성":
+        return '<span class="gender-badge-male">👨 남성</span>'
+    return '<span style="color:#64748B;">성별미기재</span>'
+
+
+def get_attendance_badge_html(status):
+    st_str = str(status).strip() if pd.notna(status) else ""
+    if st_str in ["출석", "출석 완료"]:
+        return '<span class="status-attend">🟢 출석 완료</span>'
+    elif st_str in ["결석", "노쇼", "🔴 결석(노쇼)"]:
+        return '<span class="status-absent">🔴 노쇼 / 결석</span>'
+    return '<span class="status-pending">⏳ 미체크</span>'
 
 
 def parse_memo_blocks(raw_text):
@@ -576,7 +583,7 @@ def generate_friendly_message_from_data(member_id, member_name, rem_sessions, ex
 
 
 # =========================================================
-# 3. Streamlit @st.dialog 기반 팝업 모달 정의
+# 4. Streamlit @st.dialog 기반 팝업 모달 정의
 # =========================================================
 
 if hasattr(st, "dialog"):
@@ -776,8 +783,13 @@ if hasattr(st, "dialog"):
         m_id = int(m["member_id"])
         total = int(pd.to_numeric(m.get("total_sessions", 0), errors="coerce"))
         rem = int(pd.to_numeric(m.get("remaining_sessions", 0), errors="coerce"))
-        gender_badge = get_gender_badge_html(m.get("gender"))
-        expect_badge = get_expect_badge_html(m.get("tr_expect"))
+        
+        # [수정] m_gender/m_tr_expect 안전성 보완
+        m_gender = m.get("gender") if hasattr(m, 'get') else m["gender"]
+        m_tr_exp = m.get("tr_expect") if hasattr(m, 'get') else m["tr_expect"]
+        
+        gender_badge = get_gender_badge_html(m_gender)
+        expect_badge = get_expect_badge_html(m_tr_exp)
 
         st.markdown(f"### **{m['name']}** 회원님 {gender_badge} {expect_badge}", unsafe_allow_html=True)
         st.markdown(f"<span style='font-size:13px; color:#64748B;'>연락처: {m['contact']} | 등록일: {m['reg_date']} | 잔여: <b>{rem}회</b> / 총 {total}회</span>", unsafe_allow_html=True)
@@ -1226,7 +1238,6 @@ def page_dashboard(members, logs, sales, reports, bookings):
                 </div>
                 """, unsafe_allow_html=True)
 
-                # [수정 1] 별도 "팝업 열기" 버튼 제거 ➡️ 회원명 버튼 클릭 시 바로 팝업 오픈
                 col_dash_m1, _ = st.columns([1.5, 3.5])
                 with col_dash_m1:
                     if st.button(f"👤 {m_name} 회원님", key=f"dash_m_dlg_direct_btn_{m_id}_{idx}_{s_time}"):
@@ -1352,9 +1363,11 @@ def page_consultations(consultations, members, sales, logs):
     today = get_kst_now().date()
     curr_weeks = get_month_weeks_list(today.year, today.month)
 
-    # 1. [수정 1] 신규 상담 예상 매출 합계 산식 고도화 (전환완료 건 포함 동적 합산)
+    # 1. 신규 상담 수동 세팅 기반 예상 매출 단순 합계 (미전환건 대상)
+    unconverted_consults = consultations[consultations["converted"] != True]
+    
     consult_pipeline_amount = 0
-    for _, uc in consultations.iterrows():
+    for _, uc in unconverted_consults.iterrows():
         c_exp_s = safe_int(uc.get("exp_sessions"), 0)
         c_exp_p = safe_int(uc.get("exp_price"), 0)
         
@@ -1411,7 +1424,7 @@ def page_consultations(consultations, members, sales, logs):
 
     st.write("")
 
-    # 상단 분석 차트 탭 (신규 상담 가능성 분류 차트 동적 업데이트)
+    # 상단 분석 차트 탭
     st.markdown('<div class="pt-card">', unsafe_allow_html=True)
     st.subheader(f"📊 {today.year}년 {today.month}월 상담 & 재등록 파이프라인 동향")
     
@@ -1425,7 +1438,6 @@ def page_consultations(consultations, members, sales, logs):
         if consultations.empty:
             st.info("등록된 신규 상담 데이터가 없습니다.")
         else:
-            # [수정 3] 신규 상담 상태 차트에 '이탈' 카테고리 완전 추가 반영
             c_high = len(consultations[consultations["expect_status"] == "높음"])
             c_mid = len(consultations[consultations["expect_status"] == "중간"])
             c_low = len(consultations[consultations["expect_status"] == "낮음"])
@@ -1486,7 +1498,6 @@ def page_consultations(consultations, members, sales, logs):
     with main_m_tab1:
         st.markdown("##### ➕ 신규 오프라인/온라인 상담 고객 등록")
         
-        # [수정 4] 🔴 신규 상담 등록 전용 팝업 다이얼로그 버튼 탑재
         if st.button("🔴 신규 상담 & 인테이크 설문 등록 팝업 열기", type="primary", use_container_width=True, key="btn_open_reg_consult_dlg"):
             if hasattr(st, "dialog"):
                 show_add_consultation_dialog(consultations)
@@ -1516,7 +1527,6 @@ def page_consultations(consultations, members, sales, logs):
 
                 exp_disp_str = f"<b>예상 매출: {calc_c_exp_amt:,.0f}원</b> ({c_exp_s}회 x {c_exp_p:,.0f}원)" if (c_exp_s > 0 and c_exp_p > 0) else "<span style='color:#94A3B8;'>(예상 매출가 미설정)</span>"
 
-                # [수정 3] 신규 상담 카드 리스트에도 전환 예상 상태 드롭다운 바로 노출 (높음/중간/낮음/이탈/확인중)
                 st.markdown('<div class="pt-card">', unsafe_allow_html=True)
                 col_cs1, col_cs_exp, col_cs2, col_cs3 = st.columns([1.5, 1.1, 2.2, 0.5])
 
@@ -1556,7 +1566,7 @@ def page_consultations(consultations, members, sales, logs):
 
                 st.markdown('</div>', unsafe_allow_html=True)
 
-    # === [서브 탭 2: 기존 회원 재등록 주차별 관리 (이탈 뱃지 버그 완전 수정)] ===
+    # === [서브 탭 2: 기존 회원 재등록 주차별 관리] ===
     with main_m_tab2:
         st.subheader("✏️ 기존 회원 주차별 재등록 예상가 및 1:1 메모/상담 케어")
         week_options_dynamic = ["전월이월"] + curr_weeks + ["노카테고리", "전월이탈"]
@@ -1592,7 +1602,6 @@ def page_consultations(consultations, members, sales, logs):
             idx_re = safe_index(RE_STATUS_OPTIONS, m.get('re_status'), 5)
             idx_wk = safe_index(week_options_dynamic, m.get('week_group'), 1)
 
-            # [수정 2] TR예상 값이 '이탈'일 때도 정확히 🔴 이탈 뱃지로 표출되도록 고도화
             exp_badge_html = get_expect_badge_html(m.get('tr_expect'))
 
             st.markdown('<div class="pt-card">', unsafe_allow_html=True)
@@ -1625,7 +1634,7 @@ def page_consultations(consultations, members, sales, logs):
 
 
 # =========================================================
-# 7. 페이지: 3-STEP 바이오 프로파일
+# 7. 페이지: 3-STEP 바이오 프로파일 (안전한 성별 Badge 처리 수정)
 # =========================================================
 def page_bodyplan(members, reports):
     st.title("📋 PT 3-STEP 바이오 프로파일 (AI 고도화 처방)")
@@ -1647,7 +1656,9 @@ def page_bodyplan(members, reports):
         else:
             rep_status_html = '<b style="color:#DC2626;">🔴 미작성</b>'
 
-        g_badge = get_gender_badge_html(m.get("gender"))
+        # [수정 100% 완전 보완] Series 객체 m에서 gender 컬럼을 안전하게 취득하여 g_badge 생성
+        m_gender_val = m.get("gender") if hasattr(m, 'get') else m["gender"]
+        g_badge = get_gender_badge_html(m_gender_val)
 
         st.markdown('<div class="pt-card" style="margin-bottom:12px;">', unsafe_allow_html=True)
         col_deliv, col_a, col_b, col_c = st.columns([0.8, 2.5, 1.2, 1])
@@ -2132,7 +2143,10 @@ def page_members(members, sales, bookings, logs, reports):
             rem = int(pd.to_numeric(m.get("remaining_sessions", 0), errors="coerce"))
             done = max(0, total - rem)
             has_memo = pd.notna(m.get("memo")) and str(m.get("memo")).strip() != ""
-            gender_badge = get_gender_badge_html(m.get("gender"))
+            
+            # [수정] m_gender 안전성 보완
+            m_gender_val = m.get("gender") if hasattr(m, 'get') else m["gender"]
+            gender_badge = get_gender_badge_html(m_gender_val)
 
             st.markdown('<div class="pt-card" style="padding-bottom:10px;">', unsafe_allow_html=True)
 
@@ -2434,7 +2448,7 @@ def page_inbody(members, inbody):
 
 
 # =========================================================
-# 11. 메인 라우팅 (NameError 원천 방지)
+# 11. 메인 라우팅 (NameError 완벽 조치)
 # =========================================================
 def main():
     members, logs, inbody, sales, reports, bookings, consultations = get_cached_data()
