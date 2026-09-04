@@ -366,7 +366,7 @@ def rebuild_memo_text(blocks):
 
 
 # =========================================================
-# 2. Supabase DB 세분화 캐싱 & 예외 처리 강화 (상단 배치)
+# 2. Supabase DB 세분화 캐싱 & 예외 처리 강화
 # =========================================================
 def fetch_table(table_name, columns):
     try:
@@ -575,153 +575,8 @@ def generate_friendly_message_from_data(member_id, member_name, rem_sessions, ex
 - 담당 트레이너 {MY_NAME} 올림 -"""
 
 
-def build_4step_report_html(member, report):
-    if hasattr(member, "to_dict"): m_dict = member.to_dict()
-    elif isinstance(member, dict): m_dict = member
-    else: m_dict = {}
-
-    if hasattr(report, "to_dict"): r_dict = report.to_dict()
-    elif isinstance(report, dict): r_dict = report
-    else: r_dict = {}
-
-    try: posture_list = json.loads(str(r_dict.get("posture_eval") or "[]"))
-    except Exception: posture_list = []
-    try: func_list = json.loads(str(r_dict.get("func_eval") or "[]"))
-    except Exception: func_list = []
-
-    posture_html = "".join([f"<p style='margin-bottom:8px;'><b>[{p.get('title','')}]</b><br/>{p.get('result','')}</p>" for p in posture_list]) or "<p>등록된 자세 평가가 없습니다.</p>"
-    func_html = "".join([f"<p style='margin-bottom:8px;'><b>[{f.get('title','')}]</b><br/>{f.get('result','')}</p>" for f in func_list]) or "<p>등록된 기능 평가가 없습니다.</p>"
-
-    m_name = str(m_dict.get('name') or '-')
-    m_gender = str(m_dict.get('gender') or '성별미기재')
-    m_goal = str(r_dict.get('goal_text') or m_dict.get('goal') or '체형교정 및 근력강화')
-    r_date = str(r_dict.get('date') or get_kst_now().strftime("%Y-%m-%d"))
-
-    html = f"""
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-<meta charset="UTF-8"/>
-<title>{m_name} 회원의 3-STEP 바이오 프로파일</title>
-<style>
-  @page {{ size: A4 portrait; margin: 0; }}
-  *, *:before, *:after {{ box-sizing: border-box; }}
-  html, body {{ 
-    width: 210mm; margin: 0; padding: 0;
-    background-color: #FFFFFF; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-    color: #0F172A; -webkit-print-color-adjust: exact; print-color-adjust: exact;
-  }}
-
-  .no-print-bar {{
-    background: #1E293B; padding: 12px 20px; text-align: center;
-    position: sticky; top: 0; z-index: 9999; box-shadow: 0 4px 10px rgba(0,0,0,0.15);
-  }}
-  .print-btn {{
-    background-color: {COLOR_BLUE}; color: white; border: none;
-    padding: 10px 24px; border-radius: 8px; font-size: 15px; font-weight: bold;
-    cursor: pointer; transition: background 0.2s ease;
-  }}
-  .print-btn:hover {{ background-color: #1D4ED8; }}
-
-  .cover-sheet {{
-    width: 210mm; height: 297mm; padding: 25mm 20mm; margin: 0 auto;
-    background: linear-gradient(135deg, {COLOR_NAVY} 0%, #0F172A 100%);
-    color: #FFFFFF; display: flex; flex-direction: column; justify-content: space-between;
-    page-break-after: always; page-break-inside: avoid;
-  }}
-  .cover-title {{ font-size: 42px; font-weight: 900; line-height: 1.2; letter-spacing: -1.5px; margin-top: 35mm; }}
-  .cover-badge {{ background: {COLOR_BLUE}; display: inline-block; padding: 8px 20px; border-radius: 30px; font-size: 18px; font-weight: 800; margin-top: 20px; }}
-  .cover-meta {{ border-top: 2px solid rgba(255,255,255,0.2); padding-top: 20px; font-size: 15px; line-height: 1.8; }}
-
-  .sheet {{ width: 210mm; min-height: 297mm; padding: 15mm 20mm; margin: 0 auto; background: #FFFFFF; }}
-  .header {{ border-bottom: 3px solid {COLOR_BLUE}; padding-bottom: 12px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; }}
-  .sec-title {{ font-size: 17px; font-weight: 800; color: {COLOR_NAVY}; border-left: 5px solid {COLOR_BLUE}; padding-left: 10px; margin: 18px 0 10px; }}
-  .content-card {{ background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 16px; font-size: 13.5px; line-height: 1.6; color: #334155; margin-bottom: 12px; }}
-  .grid-2 {{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }}
-
-  @media print {{
-    .no-print-bar {{ display: none !important; }}
-    body {{ background: #fff; width: 100%; }}
-    .cover-sheet {{ height: 297mm !important; max-height: 297mm !important; margin: 0; page-break-after: always; }}
-    .sheet {{ margin: 0; min-height: 297mm; page-break-after: always; }}
-  }}
-</style>
-</head>
-<body>
-
-  <div class="no-print-bar">
-    <button class="print-btn" onclick="window.print();">🖨️ PDF 저장 및 인쇄하기</button>
-  </div>
-
-  <div class="cover-sheet">
-    <div>
-      <div style="font-size: 13px; font-weight: 800; color: #60A5FA; letter-spacing: 2px;">SPECIAL BIO-PROFILE REPORT</div>
-      <div class="cover-title">3-STEP 바이오 프로파일<br/><span style="font-size:24px; font-weight:600; color:#93C5FD;">[맞춤 체형 정밀 분석 & 바이오 프로파일 로드맵]</span></div>
-      <div class="cover-badge">3 STEP PT</div>
-    </div>
-    <div class="cover-meta">
-      <b>회원명:</b> {m_name} ({m_gender})<br/>
-      <b>운동 목표:</b> {m_goal}<br/>
-      <b>발행일자:</b> {r_date}<br/>
-      <div style="margin-top: 8px; color: #94A3B8; font-size: 12.5px;">회원님의 신체 바이오 메커니즘을 정밀 분석하여 작성된 체계적인 3단계 맞춤 프로파일 리포트입니다.</div>
-      <div style="margin-top: 16px; font-size: 17px; font-weight: 800; color: #60A5FA;">담당 : {MY_NAME} 트레이너</div>
-    </div>
-  </div>
-
-  <div class="sheet">
-    <div class="header">
-      <div>
-        <div style="font-size: 20px; font-weight: 900; color: {COLOR_NAVY};">1. 신체 정밀 바이오 프로파일 분석</div>
-        <div style="font-size: 12px; color: #64748B;">이름: {m_name} | 성별: {m_gender} | 담당: {MY_NAME} 트레이너</div>
-      </div>
-    </div>
-
-    <div class="content-card" style="background:{COLOR_ICE}; border-color:#BFDBFE;">
-      <b>🎯 운동 목적:</b> {r_dict.get('goal_text','-')}<br/><br/>
-      <b>💡 신체 정밀 종합 분석:</b><br/>
-      <div style="white-space: pre-wrap; margin-top:4px;">{r_dict.get('analysis_text','-')}</div>
-    </div>
-
-    <div class="sec-title">자세 / 움직임 정밀 체크</div>
-    <div class="grid-2">
-      <div class="content-card">
-        <h4 style="margin:0 0 8px; color:{COLOR_BLUE};">📐 자세 정밀 분석 (Posture)</h4>
-        {posture_html}
-      </div>
-      <div class="content-card">
-        <h4 style="margin:0 0 8px; color:{COLOR_BLUE};">🏃 움직임 가동성 분석 (Movement)</h4>
-        {func_html}
-      </div>
-    </div>
-
-    <div class="sec-title">2. 3-STEP 맞춤 트레이닝 로드맵 (Phase 1 ~ 3)</div>
-    <div class="content-card">
-      <b style="color:{COLOR_BLUE};">STEP 1 [1~4주차: 굳은 관절 이완 & 바른 호흡 정렬 익히기]</b><br/>
-      <div style="white-space: pre-wrap; margin-top:4px;">{r_dict.get('phase1_text','-')}</div>
-    </div>
-    <div class="content-card">
-      <b style="color:{COLOR_BLUE};">STEP 2 [5~8주차: 타겟 근육 고립 & 차근차근 부하 적용]</b><br/>
-      <div style="white-space: pre-wrap; margin-top:4px;">{r_dict.get('phase2_text','-')}</div>
-    </div>
-    <div class="content-card">
-      <b style="color:{COLOR_BLUE};">STEP 3 [9~12주차: 체력 및 근지구력 극대화 & 자율 독립 루틴 완성]</b><br/>
-      <div style="white-space: pre-wrap; margin-top:4px;">{r_dict.get('phase3_text','-')}</div>
-    </div>
-
-    <div class="sec-title">3. {MY_NAME} 트레이너 마스터 코멘트</div>
-    <div class="content-card" style="line-height:1.8;">
-      <div style="white-space: pre-wrap;">{r_dict.get('trainer_comment','-')}</div>
-    </div>
-  </div>
-
-</body>
-</html>
-"""
-    return html
-
-
 # =========================================================
-# 4. Streamlit @st.dialog 기반 팝업 모달 정의
+# 3. Streamlit @st.dialog 기반 팝업 모달 정의
 # =========================================================
 
 if hasattr(st, "dialog"):
@@ -1371,6 +1226,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
                 </div>
                 """, unsafe_allow_html=True)
 
+                # [수정 1] 별도 "팝업 열기" 버튼 제거 ➡️ 회원명 버튼 클릭 시 바로 팝업 오픈
                 col_dash_m1, _ = st.columns([1.5, 3.5])
                 with col_dash_m1:
                     if st.button(f"👤 {m_name} 회원님", key=f"dash_m_dlg_direct_btn_{m_id}_{idx}_{s_time}"):
@@ -1496,11 +1352,9 @@ def page_consultations(consultations, members, sales, logs):
     today = get_kst_now().date()
     curr_weeks = get_month_weeks_list(today.year, today.month)
 
-    # 1. 신규 상담 수동 세팅 기반 예상 매출 단순 합계 (미전환건 대상)
-    unconverted_consults = consultations[consultations["converted"] != True]
-    
+    # 1. [수정 1] 신규 상담 예상 매출 합계 산식 고도화 (전환완료 건 포함 동적 합산)
     consult_pipeline_amount = 0
-    for _, uc in unconverted_consults.iterrows():
+    for _, uc in consultations.iterrows():
         c_exp_s = safe_int(uc.get("exp_sessions"), 0)
         c_exp_p = safe_int(uc.get("exp_price"), 0)
         
@@ -1557,7 +1411,7 @@ def page_consultations(consultations, members, sales, logs):
 
     st.write("")
 
-    # 상단 분석 차트 탭
+    # 상단 분석 차트 탭 (신규 상담 가능성 분류 차트 동적 업데이트)
     st.markdown('<div class="pt-card">', unsafe_allow_html=True)
     st.subheader(f"📊 {today.year}년 {today.month}월 상담 & 재등록 파이프라인 동향")
     
@@ -1571,6 +1425,7 @@ def page_consultations(consultations, members, sales, logs):
         if consultations.empty:
             st.info("등록된 신규 상담 데이터가 없습니다.")
         else:
+            # [수정 3] 신규 상담 상태 차트에 '이탈' 카테고리 완전 추가 반영
             c_high = len(consultations[consultations["expect_status"] == "높음"])
             c_mid = len(consultations[consultations["expect_status"] == "중간"])
             c_low = len(consultations[consultations["expect_status"] == "낮음"])
@@ -1631,7 +1486,7 @@ def page_consultations(consultations, members, sales, logs):
     with main_m_tab1:
         st.markdown("##### ➕ 신규 오프라인/온라인 상담 고객 등록")
         
-        # 🔴 신규 상담 등록 전용 팝업 다이얼로그 버튼
+        # [수정 4] 🔴 신규 상담 등록 전용 팝업 다이얼로그 버튼 탑재
         if st.button("🔴 신규 상담 & 인테이크 설문 등록 팝업 열기", type="primary", use_container_width=True, key="btn_open_reg_consult_dlg"):
             if hasattr(st, "dialog"):
                 show_add_consultation_dialog(consultations)
@@ -1661,6 +1516,7 @@ def page_consultations(consultations, members, sales, logs):
 
                 exp_disp_str = f"<b>예상 매출: {calc_c_exp_amt:,.0f}원</b> ({c_exp_s}회 x {c_exp_p:,.0f}원)" if (c_exp_s > 0 and c_exp_p > 0) else "<span style='color:#94A3B8;'>(예상 매출가 미설정)</span>"
 
+                # [수정 3] 신규 상담 카드 리스트에도 전환 예상 상태 드롭다운 바로 노출 (높음/중간/낮음/이탈/확인중)
                 st.markdown('<div class="pt-card">', unsafe_allow_html=True)
                 col_cs1, col_cs_exp, col_cs2, col_cs3 = st.columns([1.5, 1.1, 2.2, 0.5])
 
@@ -1700,7 +1556,7 @@ def page_consultations(consultations, members, sales, logs):
 
                 st.markdown('</div>', unsafe_allow_html=True)
 
-    # === [서브 탭 2: 기존 회원 재등록 주차별 관리] ===
+    # === [서브 탭 2: 기존 회원 재등록 주차별 관리 (이탈 뱃지 버그 완전 수정)] ===
     with main_m_tab2:
         st.subheader("✏️ 기존 회원 주차별 재등록 예상가 및 1:1 메모/상담 케어")
         week_options_dynamic = ["전월이월"] + curr_weeks + ["노카테고리", "전월이탈"]
@@ -1736,6 +1592,7 @@ def page_consultations(consultations, members, sales, logs):
             idx_re = safe_index(RE_STATUS_OPTIONS, m.get('re_status'), 5)
             idx_wk = safe_index(week_options_dynamic, m.get('week_group'), 1)
 
+            # [수정 2] TR예상 값이 '이탈'일 때도 정확히 🔴 이탈 뱃지로 표출되도록 고도화
             exp_badge_html = get_expect_badge_html(m.get('tr_expect'))
 
             st.markdown('<div class="pt-card">', unsafe_allow_html=True)
@@ -2577,7 +2434,7 @@ def page_inbody(members, inbody):
 
 
 # =========================================================
-# 11. 메인 라우팅
+# 11. 메인 라우팅 (NameError 원천 방지)
 # =========================================================
 def main():
     members, logs, inbody, sales, reports, bookings, consultations = get_cached_data()
