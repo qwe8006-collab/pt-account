@@ -328,18 +328,19 @@ def refine_raw_text(text, category="general"):
     return clean_t
 
 
+# [수정] 이탈 상태 뱃지 매핑 완전 수정
 def get_expect_badge_html(status_str):
     st_val = str(status_str).strip()
     if st_val == "높음":
         return '<span class="tr-high">🟢 높음</span>'
     elif st_val == "중간":
         return '<span class="tr-mid">🟡 중간</span>'
-    elif st_val == "낮음":
-        return '<span class="tr-low">🔴 낮음</span>'
+    elif st_val in ["낮음", "이탈"]:
+        return '<span class="tr-low">🔴 ' + st_val + '</span>'
     return '<span class="tr-check">❔ 확인중</span>'
 
 
-# 메모 텍스트를 카드형 배열 블록 구조로 파싱하는 헬퍼 함수
+# 메모 텍스트 파싱 헬퍼
 def parse_memo_blocks(raw_text):
     if not raw_text or not str(raw_text).strip():
         return []
@@ -596,8 +597,68 @@ def get_attendance_badge_html(status):
 
 
 # =========================================================
-# 3. Streamlit @st.dialog 기반 팝업 모달 정의 (말줄임표 완전히 제거된 명확한 수정/삭제 버튼)
+# 3. Streamlit @st.dialog 기반 팝업 모달 정의 (신규 등록 다이얼로그 모달 탑재)
 # =========================================================
+
+# [신규 추가] 🔴 신규 상담 등록 전용 다이얼로그 팝업 모달
+if hasattr(st, "dialog"):
+    @st.dialog("🔴 신규 오프라인/온라인 상담 & 인테이크 등록")
+    def show_add_consultation_dialog(consultations):
+        st.markdown("###### **1. 기본 인적사항 & 상담 가능성**")
+        cc1, cc2, cc3 = st.columns(3)
+        c_name = cc1.text_input("상담 고객 이름 *", placeholder="예: 홍길동", key="dlg_reg_cname")
+        c_contact = cc2.text_input("연락처 * (숫자만)", placeholder="01012345678", key="dlg_reg_ccontact")
+        c_gender = cc3.selectbox("성별 *", ["여성", "남성"], key="dlg_reg_cgender")
+
+        cc4, cc5, cc6 = st.columns(3)
+        c_goal = cc4.text_input("희망 운동 목적", placeholder="예: 다이어트, 체형교정", key="dlg_reg_cgoal")
+        c_source = cc5.selectbox("유입 경로", ["네이버/인스타그램", "지인 추천", "길거리/간판", "기타"], key="dlg_reg_csource")
+        c_expect = cc6.selectbox("등록 가능성 (전환 예측)", ["높음", "중간", "낮음", "이탈", "확인중"], key="dlg_reg_cexpect")
+
+        st.markdown("---")
+        st.markdown("###### **2. PT 사전 인테이크(Intake) 정밀 설문지**")
+        sur_c1, sur_c2 = st.columns(2)
+        s_med = sur_c1.text_input("과거/현재 병력 이력", placeholder="예: 고혈압, 허리 디스크 등", key="dlg_reg_smed")
+        s_pain = sur_c2.text_input("통증 및 불편 부위", placeholder="예: 스쿼트 시 무릎 등", key="dlg_reg_spain")
+
+        sur_c3, sur_c4 = st.columns(2)
+        s_exp = sur_c3.text_input("운동 이력 및 PT 경험", placeholder="예: 헬스 6개월 경험 있음", key="dlg_reg_sexp")
+        s_habit = sur_c4.text_input("수면 / 식습관 / 음주", placeholder="예: 하루 6시간 수면", key="dlg_reg_shabit")
+
+        c_memo = st.text_area("💬 기타 특이사항 코멘트", placeholder="우측 어깨 교정 훈련 필요.", height=80, key="dlg_reg_cmemo")
+
+        if st.button("💡 신규 상담 기록 즉시 저장", type="primary", use_container_width=True, key="dlg_btn_save_consult_form"):
+            clean_contact = re.sub(r"[^0-9]", "", c_contact)
+            if not c_name.strip():
+                st.error("⚠️ 고객 이름을 입력해 주세요.")
+            elif len(clean_contact) < 10:
+                st.error("⚠️ 올바른 연락처 번호를 입력해 주세요.")
+            else:
+                formatted_contact = f"{clean_contact[:3]}-{clean_contact[3:7]}-{clean_contact[7:]}" if len(clean_contact) == 11 else clean_contact
+                new_c_id = next_id(consultations, "consult_id")
+                today_str = get_kst_now().strftime("%Y-%m-%d")
+                now_stamp = get_kst_now().strftime("[%Y-%m-%d %H:%M]")
+
+                intake_full_text = f"""[인테이크 설문 이력]
+• 병력: {s_med if s_med else '없음'}
+• 통증부위: {s_pain if s_pain else '없음'}
+• 운동경험: {s_exp if s_exp else '없음'}
+• 수면/식습관: {s_habit if s_habit else '없음'}
+• 메모: {c_memo}"""
+
+                formatted_init_memo = f"{now_stamp}\n{intake_full_text}"
+
+                new_c = {
+                    "consult_id": new_c_id, "date": today_str,
+                    "name": c_name.strip(), "contact": formatted_contact,
+                    "gender": c_gender, "goal": c_goal, "source": c_source,
+                    "expect_status": c_expect, "memo": formatted_init_memo, "converted": False,
+                    "exp_sessions": 0, "exp_price": 0
+                }
+                consultations = pd.concat([consultations, pd.DataFrame([new_c])], ignore_index=True)
+                if save_consultations(consultations):
+                    st.toast(f"🎉 '{c_name}' 고객의 상담 기록이 성공적으로 추가되었습니다!")
+                    rerun()
 
 # A. 상담 고객 상세 모달 팝업
 if hasattr(st, "dialog"):
@@ -646,7 +707,6 @@ if hasattr(st, "dialog"):
                     </div>
                     """, unsafe_allow_html=True)
 
-                    # [수정] 말줄임표 제거용 명확한 버블 버튼 레이아웃
                     btn_c1, btn_c2, _ = st.columns([1.5, 1.5, 2.0])
                     if btn_c1.button("✏️ 수정하기", key=f"edit_c_blk_{c_id}_{b_idx}"):
                         st.session_state[f"editing_c_blk_{c_id}"] = b_idx
@@ -733,7 +793,7 @@ if hasattr(st, "dialog"):
                     save_consultations(consultations)
                     st.toast("상담 상태가 '상담 진행중'으로 초기화되었습니다.")
 
-# B. 기존 회원 상세 모달 팝업 (대시보드 절대 출결 이력만 오롯이 연동 가져옴)
+# B. 기존 회원 상세 모달 팝업
 if hasattr(st, "dialog"):
     @st.dialog("👤 회원통합 상세 케어 모달")
     def show_member_dialog(m, members, logs, inbody_df, logs_df, bookings_df=None):
@@ -781,7 +841,6 @@ if hasattr(st, "dialog"):
                     </div>
                     """, unsafe_allow_html=True)
 
-                    # [수정] 말줄임표 제거용 명확한 버블 버튼 레이아웃
                     btn_m1, btn_m2, _ = st.columns([1.5, 1.5, 2.0])
                     if btn_m1.button("✏️ 수정하기", key=f"edit_m_blk_{m_id}_{b_idx}"):
                         st.session_state[f"editing_m_blk_{m_id}"] = b_idx
@@ -893,7 +952,7 @@ if hasattr(st, "dialog"):
 
 
 # =========================================================
-# 4. 페이지 1: 센터 대시보드 (회원명 클릭 시 모달 연동 & 빨간 메모 태그 삭제)
+# 4. 페이지 1: 센터 대시보드
 # =========================================================
 def page_dashboard(members, logs, sales, reports, bookings):
     st.title("📊 PT Account 통합 대시보드")
@@ -1183,7 +1242,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
                 <div style="background:#F8FAFC; border-left:4px solid {COLOR_BLUE}; border-radius:10px; padding:14px 20px; margin-bottom:8px;">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <div style="display:flex; align-items:center; gap:8px;">
-                            <span style="font-size:17px; font-weight:800; color:{COLOR_NAVY};">👤 {m_name} 회원님</span> {g_badge} {rem_badge} {att_badge}
+                            👤 <b><span style="font-size:17px; color:{COLOR_NAVY};">{m_name} 회원님</span></b> {g_badge} {rem_badge} {att_badge}
                         </div>
                         <div style="font-weight:800; font-size:15px; color:{COLOR_BLUE};">
                             ⏰ {s_time} ~ {e_time}
@@ -1192,10 +1251,10 @@ def page_dashboard(members, logs, sales, reports, bookings):
                 </div>
                 """, unsafe_allow_html=True)
 
-                # [수정] 대시보드 스케줄 카드 내 회원명 클릭 시 팝업 모달 연동
-                col_dash_m1, col_dash_m2 = st.columns([1.5, 3.5])
+                # [수정 완료] 빨간색 메모 태그 완전 삭제 및 회원명 클릭 시 모달 열기 연동
+                col_dash_m1, _ = st.columns([2, 3])
                 with col_dash_m1:
-                    if st.button(f"👤 {m_name} 회원 케어 팝업 열기", key=f"dash_m_dlg_btn_{m_id}_{idx}_{s_time}"):
+                    if st.button(f"👤 {m_name} 회원 케어 팝업 모달 열기", key=f"dash_m_dlg_btn_{m_id}_{idx}_{s_time}"):
                         m_row_target = members[members["member_id"].astype(str) == str(m_id)].iloc[0]
                         if hasattr(st, "dialog"):
                             show_member_dialog(m_row_target, members, logs, inbody_df, logs, day_bookings)
@@ -1330,7 +1389,7 @@ def page_consultations(consultations, members, sales, logs):
         if c_st in ["높음", "중간", "확인중"] and c_exp_s > 0 and c_exp_p > 0:
             consult_pipeline_amount += (c_exp_s * c_exp_p)
 
-    # 2. 기존 회원 재등록 예상 매출 단순 합계 (가중치 제거 100% 원금 합산)
+    # 2. 기존 회원 재등록 예상 매출 단순 합계
     re_pipeline_amount = 0
     re_high_amount = 0
 
@@ -1379,7 +1438,7 @@ def page_consultations(consultations, members, sales, logs):
 
     st.write("")
 
-    # 상단 분석 차트 탭
+    # 상단 분석 차트 탭 (신규 상담 가능성 분류 차트 동적 업데이트)
     st.markdown('<div class="pt-card">', unsafe_allow_html=True)
     st.subheader(f"📊 {today.year}년 {today.month}월 상담 & 재등록 파이프라인 동향")
     
@@ -1393,9 +1452,11 @@ def page_consultations(consultations, members, sales, logs):
         if consultations.empty:
             st.info("등록된 신규 상담 데이터가 없습니다.")
         else:
+            # [수정] 신규 상담 상태 차트에 '이탈' 카테고리 완전 추가 반영
             c_high = len(consultations[consultations["expect_status"] == "높음"])
             c_mid = len(consultations[consultations["expect_status"] == "중간"])
             c_low = len(consultations[consultations["expect_status"] == "낮음"])
+            c_drop = len(consultations[consultations["expect_status"] == "이탈"])
             c_check = len(consultations[(consultations["expect_status"] == "확인중") | (consultations["expect_status"].isna())])
             c_converted = len(consultations[consultations["converted"] == True])
 
@@ -1403,6 +1464,7 @@ def page_consultations(consultations, members, sales, logs):
             fig_c.add_trace(go.Bar(x=["상담 모수"], y=[c_high], name="🟢 높음", marker_color="#22C55E"))
             fig_c.add_trace(go.Bar(x=["상담 모수"], y=[c_mid], name="🟡 중간", marker_color="#EAB308"))
             fig_c.add_trace(go.Bar(x=["상담 모수"], y=[c_low], name="🔴 낮음", marker_color="#EF4444"))
+            fig_c.add_trace(go.Bar(x=["상담 모수"], y=[c_drop], name="🔴 이탈", marker_color="#991B1B"))
             fig_c.add_trace(go.Bar(x=["상담 모수"], y=[c_check], name="❔ 확인중", marker_color="#94A3B8"))
 
             fig_c.update_layout(
@@ -1447,75 +1509,14 @@ def page_consultations(consultations, members, sales, logs):
     # 메인 관리 서브 탭
     main_m_tab1, main_m_tab2 = st.tabs(["💡 신규 상담 고객 관리", "🎯 기존 회원 재등록 주차별 관리"])
 
-    # === [서브 탭 1: 신규 상담 고객 관리 (기본 접힘 expanded=False 적용)] ===
+    # === [서브 탭 1: 신규 상담 고객 관리 (🔴 신규 상담 등록 다이얼로그 버튼 대체)] ===
     with main_m_tab1:
         st.markdown("##### ➕ 신규 오프라인/온라인 상담 고객 등록")
-        # [수정] 항시 접혀있도록 expanded=False 설정
-        with st.expander("📝 신규 상담 & 인테이크 설문 등록 폼 열기", expanded=False):
-            with st.form("consult_form", clear_on_submit=True):
-                st.markdown("###### **1. 기본 인적사항 & 상담 가능성**")
-                cc1, cc2, cc3 = st.columns(3)
-                c_name = cc1.text_input("상담 고객 이름 *", placeholder="예: 홍길동")
-                c_contact = cc2.text_input("연락처 * (숫자만)", placeholder="01012345678")
-                c_gender = cc3.selectbox("성별 *", ["여성", "남성"])
-
-                cc4, cc5, cc6 = st.columns(3)
-                c_goal = cc4.text_input("희망 운동 목적", placeholder="예: 다이어트, 체형교정, 바디프로필")
-                c_source = cc5.selectbox("유입 경로", ["네이버/인스타그램", "지인 추천", "길거리/간판", "기타"])
-                c_expect = cc6.selectbox("등록 가능성 (전환 예측)", ["높음", "중간", "낮음", "확인중"])
-
-                st.markdown("---")
-                st.markdown("###### **2. PT 사전 인테이크(Intake) 정밀 설문지**")
-                sur_c1, sur_c2 = st.columns(2)
-                s_med = sur_c1.text_input("과거/현재 병력 및 질환 이력", placeholder="예: 고혈압, 허리 디스크, 없음 등")
-                s_pain = sur_c2.text_input("통증 및 불편 부위", placeholder="예: 스쿼트 시 우측 무릎, 어깨 집힘 등")
-
-                sur_c3, sur_c4 = st.columns(2)
-                s_exp = sur_c3.text_input("운동 이력 및 PT 경험", placeholder="예: 헬스 6개월, PT 경험 10회 있음")
-                s_habit = sur_c4.text_input("수면 / 식습관 / 음주 여부", placeholder="예: 하루 6시간 수면, 주 2회 음주")
-
-                sur_c5, sur_c6 = st.columns(2)
-                s_time = sur_c5.text_input("수업 가능 선호 시간대", placeholder="예: 평일 저녁 7시 이후, 주말 오전 등")
-                s_style = sur_c6.text_input("선호 트레이닝 스타일", placeholder="예: 자극 위주 가이드, 강도 높은 웨이트")
-
-                c_memo = st.text_area("💬 기타 특이사항 종합 코멘트 메모", placeholder="예: 우측 어깨 집힘 증상 관찰되어 1회차 라운드숄더 교정 훈련 필요.", height=80)
-
-                if st.form_submit_button("💡 신규 상담 & 인테이크 기록 저장", type="primary", use_container_width=True):
-                    clean_contact = re.sub(r"[^0-9]", "", c_contact)
-                    if not c_name.strip():
-                        st.error("⚠️ 고객 이름을 입력해 주세요.")
-                    elif len(clean_contact) < 10:
-                        st.error("⚠️ 올바른 연락처 번호를 입력해 주세요.")
-                    else:
-                        if len(clean_contact) == 11: formatted_contact = f"{clean_contact[:3]}-{clean_contact[3:7]}-{clean_contact[7:]}"
-                        else: formatted_contact = clean_contact
-
-                        new_c_id = next_id(consultations, "consult_id")
-                        today_str = get_kst_now().strftime("%Y-%m-%d")
-                        now_stamp = get_kst_now().strftime("[%Y-%m-%d %H:%M]")
-
-                        intake_full_text = f"""[인테이크 설문 이력]
-• 병력: {s_med if s_med else '없음'}
-• 통증부위: {s_pain if s_pain else '없음'}
-• 운동경험: {s_exp if s_exp else '없음'}
-• 수면/식습관: {s_habit if s_habit else '없음'}
-• 선호시간: {s_time if s_time else '없음'}
-• 훈련스타일: {s_style if s_style else '없음'}
-• 메모: {c_memo}"""
-
-                        formatted_init_memo = f"{now_stamp}\n{intake_full_text}"
-
-                        new_c = {
-                            "consult_id": new_c_id, "date": today_str,
-                            "name": c_name.strip(), "contact": formatted_contact,
-                            "gender": c_gender, "goal": c_goal, "source": c_source,
-                            "expect_status": c_expect, "memo": formatted_init_memo, "converted": False,
-                            "exp_sessions": 0, "exp_price": 0
-                        }
-                        consultations = pd.concat([consultations, pd.DataFrame([new_c])], ignore_index=True)
-                        if save_consultations(consultations):
-                            st.toast(f"'{c_name}' 고객의 상담 및 인테이크 기록이 저장되었습니다!")
-                            rerun()
+        
+        # [수정] 복잡한 익스팬더 대신 빨간색 팝업 다이얼로그 버튼으로 깔끔하게 대체
+        if st.button("🔴 신규 상담 & 인테이크 설문 등록 폼 열기", type="primary", use_container_width=True, key="btn_open_reg_consult_dlg"):
+            if hasattr(st, "dialog"):
+                show_add_consultation_dialog(consultations)
 
         st.write("")
         st.markdown("##### 📋 신규 상담 리스트 및 회원 전환 케어")
@@ -1573,7 +1574,7 @@ def page_consultations(consultations, members, sales, logs):
 
                 st.markdown('</div>', unsafe_allow_html=True)
 
-    # === [서브 탭 2: 기존 회원 재등록 주차별 관리] ===
+    # === [서브 탭 2: 기존 회원 재등록 주차별 관리 (이탈 뱃지 버그 완전 수정)] ===
     with main_m_tab2:
         st.subheader("✏️ 기존 회원 주차별 재등록 예상가 및 1:1 메모/상담 케어")
         week_options_dynamic = ["전월이월"] + curr_weeks + ["노카테고리", "전월이탈"]
@@ -1609,6 +1610,7 @@ def page_consultations(consultations, members, sales, logs):
             idx_re = safe_index(RE_STATUS_OPTIONS, m.get('re_status'), 5)
             idx_wk = safe_index(week_options_dynamic, m.get('week_group'), 1)
 
+            # [수정] TR예상 값이 '이탈'일 때도 정확히 🔴 이탈 뱃지로 표출되도록 고도화
             exp_badge_html = get_expect_badge_html(m.get('tr_expect'))
 
             st.markdown('<div class="pt-card">', unsafe_allow_html=True)
