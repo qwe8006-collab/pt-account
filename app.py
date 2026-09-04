@@ -366,23 +366,223 @@ def rebuild_memo_text(blocks):
 
 
 # =========================================================
-# 3. 3-STEP 바이오 프로파일 HTML 생성기 (완벽 방어형 타입 변환)
+# 2. Supabase DB 세분화 캐싱 & 예외 처리 강화 (상단 배치)
 # =========================================================
-def build_4step_report_html(member, report):
-    # [수정 100% 완전 보완] Series, DataFrame Row, Dict 어떠한 객체가 인자로 들어와도 dict로 변환
-    if hasattr(member, "to_dict"):
-        m_dict = member.to_dict()
-    elif isinstance(member, dict):
-        m_dict = member
-    else:
-        m_dict = {}
+def fetch_table(table_name, columns):
+    try:
+        res = supabase.table(table_name).select("*").execute()
+        df = pd.DataFrame(res.data)
+        if df.empty:
+            return pd.DataFrame(columns=columns)
+        for col in columns:
+            if col not in df.columns: df[col] = None
+        return df[columns]
+    except Exception as e:
+        st.error(f"DB Fetch 에러 ({table_name}): {e}")
+        return pd.DataFrame(columns=columns)
 
-    if hasattr(report, "to_dict"):
-        r_dict = report.to_dict()
-    elif isinstance(report, dict):
-        r_dict = report
-    else:
-        r_dict = {}
+def get_cached_data():
+    if "members_df" not in st.session_state: st.session_state["members_df"] = fetch_table("members", MEMBERS_COLUMNS)
+    if "logs_df" not in st.session_state: st.session_state["logs_df"] = fetch_table("logs", LOGS_COLUMNS)
+    if "inbody_df" not in st.session_state: st.session_state["inbody_df"] = fetch_table("inbody", INBODY_COLUMNS)
+    if "sales_df" not in st.session_state: st.session_state["sales_df"] = fetch_table("sales", SALES_COLUMNS)
+    if "reports_df" not in st.session_state: st.session_state["reports_df"] = fetch_table("reports", REPORTS_COLUMNS)
+    if "bookings_df" not in st.session_state: st.session_state["bookings_df"] = fetch_table("bookings", BOOKINGS_COLUMNS)
+    if "consultations_df" not in st.session_state: st.session_state["consultations_df"] = fetch_table("consultations", CONSULTATIONS_COLUMNS)
+
+    return (
+        st.session_state["members_df"],
+        st.session_state["logs_df"],
+        st.session_state["inbody_df"],
+        st.session_state["sales_df"],
+        st.session_state["reports_df"],
+        st.session_state["bookings_df"],
+        st.session_state["consultations_df"]
+    )
+
+def save_data_safe(table_name, df):
+    if df.empty: return True
+    data = df.to_dict(orient="records")
+    int_fields = ["member_id", "log_id", "record_id", "sale_id", "report_id", "booking_id", "consult_id", "total_sessions", "remaining_sessions", "session_price", "age", "exp_re_sessions", "exp_re_price", "is_exp_configured", "amount", "exp_sessions", "exp_price"]
+    float_fields = ["weight", "skeletal_muscle", "body_fat_pct"]
+    bool_fields = ["sent", "delivered", "converted"]
+
+    clean_batch = []
+    for row in data:
+        clean_row = {}
+        for k, v in row.items():
+            if pd.isna(v) or v is None: clean_row[k] = None
+            elif k in int_fields: clean_row[k] = int(float(v))
+            elif k in float_fields: clean_row[k] = float(v)
+            elif k in bool_fields: clean_row[k] = bool(v)
+            else: clean_row[k] = str(v)
+        clean_batch.append(clean_row)
+
+    try:
+        supabase.table(table_name).upsert(clean_batch).execute()
+        return True
+    except Exception as e:
+        st.error(f"🚨 DB 저장 중 오류가 발생했습니다 ({table_name}): {e}")
+        return False
+
+def save_members(df): 
+    st.session_state["members_df"] = df
+    return save_data_safe("members", df)
+
+def save_logs(df): 
+    st.session_state["logs_df"] = df
+    return save_data_safe("logs", df)
+
+def save_inbody(df): 
+    st.session_state["inbody_df"] = df
+    return save_data_safe("inbody", df)
+
+def save_sales(df): 
+    st.session_state["sales_df"] = df
+    return save_data_safe("sales", df)
+
+def save_reports(df): 
+    st.session_state["reports_df"] = df
+    return save_data_safe("reports", df)
+
+def save_bookings(df): 
+    st.session_state["bookings_df"] = df
+    return save_data_safe("bookings", df)
+
+def save_consultations(df):
+    st.session_state["consultations_df"] = df
+    return save_data_safe("consultations", df)
+
+def update_attendance_log_and_session(member_id, date_str, start_time_str, end_time_str, new_att_val):
+    try:
+        logs_df = st.session_state.get("logs_df", fetch_table("logs", LOGS_COLUMNS))
+        members_df = st.session_state.get("members_df", fetch_table("members", MEMBERS_COLUMNS))
+        
+        mask = (logs_df["member_id"].astype(str) == str(member_id)) & (logs_df["date"] == date_str) & (logs_df["start_time"] == start_time_str)
+        prev_att_val = "미체크"
+        
+        if mask.any():
+            prev_att_val = str(logs_df.loc[mask, "attendance"].values[0]).strip()
+            logs_df.loc[mask, "attendance"] = new_att_val
+        else:
+            new_id = next_id(logs_df, "log_id")
+            new_row = {
+                "log_id": new_id, "member_id": member_id, "date": date_str,
+                "start_time": start_time_str, "end_time": end_time_str, "exercises_json": "[]",
+                "good_points": f"수업 {new_att_val} 처리", "improve_points": "",
+                "sent": False, "attendance": new_att_val
+            }
+            logs_df = pd.concat([logs_df, pd.DataFrame([new_row])], ignore_index=True)
+
+        save_logs(logs_df)
+
+        m_mask = members_df["member_id"].astype(str) == str(member_id)
+        if m_mask.any():
+            cur_rem = safe_int(members_df.loc[m_mask, "remaining_sessions"].values[0], 0)
+            
+            if prev_att_val in ["미체크", ""] and new_att_val in ["출석", "결석", "노쇼"]:
+                if cur_rem > 0:
+                    members_df.loc[m_mask, "remaining_sessions"] = cur_rem - 1
+                    save_members(members_df)
+            
+            elif prev_att_val in ["출석", "결석", "노쇼"] and new_att_val == "미체크":
+                members_df.loc[m_mask, "remaining_sessions"] = cur_rem + 1
+                save_members(members_df)
+
+    except Exception as e:
+        st.error(f"출결 동기화 및 세션 차감 오류: {e}")
+
+def next_id(df, id_col):
+    if df.empty: return 1
+    return int(pd.to_numeric(df[id_col], errors="coerce").fillna(0).max()) + 1
+
+
+def generate_friendly_message_from_data(member_id, member_name, rem_sessions, exercises_df, good, improve):
+    ex_summary = []
+    weight_increases = []
+
+    logs_df = st.session_state.get("logs_df", fetch_table("logs", LOGS_COLUMNS))
+    m_past_logs = logs_df[pd.to_numeric(logs_df["member_id"], errors="coerce") == int(member_id)]
+
+    past_max_weights = {}
+    if not m_past_logs.empty:
+        for _, plog in m_past_logs.iterrows():
+            try:
+                plist = json.loads(plog.get("exercises_json") or "[]")
+                for pex in plist:
+                    pitem = pex.get("종목", "").strip()
+                    pw = safe_float(pex.get("중량(kg)", 0))
+                    if pitem and pw > 0:
+                        if pitem not in past_max_weights or pw > past_max_weights[pitem]:
+                            past_max_weights[pitem] = pw
+            except Exception:
+                pass
+
+    if isinstance(exercises_df, pd.DataFrame) and not exercises_df.empty:
+        for _, row in exercises_df.iterrows():
+            item = str(row.get("종목", "")).strip()
+            if item:
+                w = safe_float(row.get("중량(kg)", 0))
+                c = int(safe_float(row.get("횟수", 0)))
+                s = int(safe_float(row.get("세트", 0)))
+                ex_summary.append(f"  • {item}: {w}kg x {c}회 x {s}세트")
+
+                if item in past_max_weights:
+                    prev_w = past_max_weights[item]
+                    if w > prev_w:
+                        diff = round(w - prev_w, 1)
+                        weight_increases.append(f"🔥 {item} ({prev_w}kg ➡️ {w}kg, +{diff}kg 상승!)")
+
+    ex_text = "\n".join(ex_summary) if ex_summary else "  • 전신 기초 가동성 및 코어 훈련"
+    g_text = good if good else "오늘도 설정한 운동 목표 루틴을 깔끔하게 완수하셨습니다!"
+    i_text = improve if improve else "다음 수업 때는 자세 정렬에 조금 더 신경 써볼게요."
+
+    overload_text = ""
+    if weight_increases:
+        overload_text = "\n\n[💪 점진적 과부하 갱신!]\n" + "\n".join(weight_increases)
+
+    next_class_text = ""
+    try:
+        bookings_df = st.session_state.get("bookings_df", fetch_table("bookings", BOOKINGS_COLUMNS))
+        today_str = get_kst_now().date().isoformat()
+        
+        user_future_bookings = bookings_df[
+            (bookings_df["member_id"].astype(str) == str(member_id)) &
+            (bookings_df["status"] != "취소") &
+            (bookings_df["date"] >= today_str)
+        ].sort_values(by=["date", "time_slot"])
+
+        if not user_future_bookings.empty:
+            next_b = user_future_bookings.iloc[0]
+            next_date_str = str(next_b["date"])
+            next_time_str = str(next_b["time_slot"])
+            next_class_text = f"\n🗓️ 다음 수업 일정: {next_date_str} ({next_time_str})"
+    except Exception:
+        next_class_text = ""
+
+    return f"""안녕하세요 {member_name} 회원님! 오늘 PT 수업도 고생 많으셨습니다. 💪
+
+[오늘 진행한 운동 루틴]
+{ex_text}{overload_text}
+
+[트레이너 피드백]
+✔ 잘하신 점: {g_text}
+✔ 보완할 점: {i_text}
+
+⏳ 남은 세션: {rem_sessions}회{next_class_text}
+
+오늘도 고생하셨습니다! 다음 수업 때도 화이팅입니다! 🔥
+- 담당 트레이너 {MY_NAME} 올림 -"""
+
+
+def build_4step_report_html(member, report):
+    if hasattr(member, "to_dict"): m_dict = member.to_dict()
+    elif isinstance(member, dict): m_dict = member
+    else: m_dict = {}
+
+    if hasattr(report, "to_dict"): r_dict = report.to_dict()
+    elif isinstance(report, dict): r_dict = report
+    else: r_dict = {}
 
     try: posture_list = json.loads(str(r_dict.get("posture_eval") or "[]"))
     except Exception: posture_list = []
@@ -524,7 +724,6 @@ def build_4step_report_html(member, report):
 # 4. Streamlit @st.dialog 기반 팝업 모달 정의
 # =========================================================
 
-# 🔴 신규 상담 등록 다이얼로그 팝업 모달
 if hasattr(st, "dialog"):
     @st.dialog("🔴 신규 오프라인/온라인 상담 & 인테이크 등록")
     def show_add_consultation_dialog(consultations):
@@ -584,7 +783,6 @@ if hasattr(st, "dialog"):
                     st.toast(f"🎉 '{c_name}' 고객의 상담 기록이 성공적으로 추가되었습니다!")
                     rerun()
 
-# A. 상담 고객 상세 모달 팝업
 if hasattr(st, "dialog"):
     @st.dialog("👤 신규 상담 고객 상세 케어 모달")
     def show_consultation_dialog(c, consultations, members, sales):
@@ -717,7 +915,6 @@ if hasattr(st, "dialog"):
                     save_consultations(consultations)
                     st.toast("상담 상태가 '상담 진행중'으로 초기화되었습니다.")
 
-# B. 기존 회원 상세 모달 팝업
 if hasattr(st, "dialog"):
     @st.dialog("👤 회원통합 상세 케어 모달")
     def show_member_dialog(m, members, logs, inbody_df, logs_df, bookings_df=None):
@@ -1299,9 +1496,11 @@ def page_consultations(consultations, members, sales, logs):
     today = get_kst_now().date()
     curr_weeks = get_month_weeks_list(today.year, today.month)
 
-    # 1. [수정 1] 신규 상담 예상 매출 합계 산식 고도화 (전환완료 건 포함 동적 합산)
+    # 1. 신규 상담 수동 세팅 기반 예상 매출 단순 합계 (미전환건 대상)
+    unconverted_consults = consultations[consultations["converted"] != True]
+    
     consult_pipeline_amount = 0
-    for _, uc in consultations.iterrows():
+    for _, uc in unconverted_consults.iterrows():
         c_exp_s = safe_int(uc.get("exp_sessions"), 0)
         c_exp_p = safe_int(uc.get("exp_price"), 0)
         
@@ -1358,7 +1557,7 @@ def page_consultations(consultations, members, sales, logs):
 
     st.write("")
 
-    # 상단 분석 차트 탭 (신규 상담 가능성 분류 차트 동적 업데이트)
+    # 상단 분석 차트 탭
     st.markdown('<div class="pt-card">', unsafe_allow_html=True)
     st.subheader(f"📊 {today.year}년 {today.month}월 상담 & 재등록 파이프라인 동향")
     
@@ -1462,7 +1661,6 @@ def page_consultations(consultations, members, sales, logs):
 
                 exp_disp_str = f"<b>예상 매출: {calc_c_exp_amt:,.0f}원</b> ({c_exp_s}회 x {c_exp_p:,.0f}원)" if (c_exp_s > 0 and c_exp_p > 0) else "<span style='color:#94A3B8;'>(예상 매출가 미설정)</span>"
 
-                # [수정 3] 신규 상담 카드 리스트에도 전환 예상 상태 드롭다운 바로 노출 (높음/중간/낮음/이탈/확인중)
                 st.markdown('<div class="pt-card">', unsafe_allow_html=True)
                 col_cs1, col_cs_exp, col_cs2, col_cs3 = st.columns([1.5, 1.1, 2.2, 0.5])
 
@@ -1538,7 +1736,6 @@ def page_consultations(consultations, members, sales, logs):
             idx_re = safe_index(RE_STATUS_OPTIONS, m.get('re_status'), 5)
             idx_wk = safe_index(week_options_dynamic, m.get('week_group'), 1)
 
-            # [수정 2] TR예상 값이 '이탈'일 때도 정확히 🔴 이탈 뱃지로 표출되도록 고도화
             exp_badge_html = get_expect_badge_html(m.get('tr_expect'))
 
             st.markdown('<div class="pt-card">', unsafe_allow_html=True)
@@ -2380,7 +2577,7 @@ def page_inbody(members, inbody):
 
 
 # =========================================================
-# 11. 메인 라우팅 (NameError 완전 해결)
+# 11. 메인 라우팅
 # =========================================================
 def main():
     members, logs, inbody, sales, reports, bookings, consultations = get_cached_data()
