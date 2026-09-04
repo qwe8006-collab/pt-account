@@ -25,7 +25,7 @@ def get_kst_now():
     return datetime.now(timezone(timedelta(hours=9)))
 
 # =========================================================
-# 0-1. Supabase DB 연결 설정
+# 0-1. Supabase DB 연결 및 최상단 캐시 관리 헬퍼 (스코프 원천 차단)
 # =========================================================
 @st.cache_resource
 def init_supabase():
@@ -34,110 +34,6 @@ def init_supabase():
     return create_client(url, key)
 
 supabase: Client = init_supabase()
-
-# =========================================================
-# 0-2. 페이지 설정 & 블루톤 UI Design System
-# =========================================================
-st.set_page_config(
-    page_title="PT Account — 김준수 트레이너",
-    page_icon="🏋️",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
-
-MY_NAME = "김준수"
-COLOR_NAVY = "#1E293B"
-COLOR_BLUE = "#2563EB"
-COLOR_ICE = "#EFF6FF"
-COLOR_TEXT = "#0F172A"
-
-CUSTOM_CSS = f"""
-<style>
-    html, body, [class*="css"] {{
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    }}
-    .stApp {{ background-color: {COLOR_ICE}; }}
-
-    section[data-testid="stSidebar"] {{ background-color: {COLOR_NAVY}; }}
-    section[data-testid="stSidebar"] * {{ color: #E2E8F0 !important; }}
-    section[data-testid="stSidebar"] div[role="radiogroup"] label {{
-        background: rgba(255,255,255,0.04);
-        border-radius: 10px; padding: 12px 14px; margin-bottom: 6px;
-        font-weight: 700; transition: background .15s ease;
-    }}
-    section[data-testid="stSidebar"] div[role="radiogroup"] label:hover {{
-        background: rgba(37,99,235,0.35);
-    }}
-
-    .pt-card {{
-        background: #FFFFFF; border: 1px solid #DCE6F5; border-radius: 16px;
-        padding: 20px; box-shadow: 0 8px 22px rgba(15,23,42,0.06); margin-bottom: 16px;
-    }}
-    .pt-metric {{
-        background: #FFFFFF; border: 1px solid #DCE6F5; border-radius: 16px;
-        padding: 18px 20px; box-shadow: 0 8px 22px rgba(15,23,42,0.06);
-    }}
-    .pt-metric .label {{ font-size: 12.5px; font-weight: 700; color: #64748B; text-transform: uppercase; }}
-    .pt-metric .value {{ font-size: 26px; font-weight: 800; color: {COLOR_TEXT}; margin-top: 4px; }}
-    .pt-metric .value.accent {{ color: {COLOR_BLUE}; }}
-
-    div.stButton > button {{ border-radius: 10px; font-weight: 700; }}
-
-    .slot-booked {{ background:{COLOR_ICE}; border-radius:8px; padding:12px; font-size:15px; border-left: 4px solid {COLOR_BLUE}; }}
-    .cal-weekday {{ text-align:center; font-weight:800; color:#64748B; font-size:14px; padding-bottom:8px; }}
-
-    .custom-item-card {{
-        background: #FFFFFF;
-        border-left: 5px solid {COLOR_BLUE};
-        border-radius: 12px;
-        padding: 14px 18px;
-        margin-bottom: 8px;
-        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }}
-
-    .gender-badge-female {{
-        background-color: #FFE4E6; color: #E11D48; padding: 3px 10px;
-        border-radius: 12px; font-weight: 800; font-size: 12px; border: 1px solid #FECDD3; display: inline-block;
-    }}
-    .gender-badge-male {{
-        background-color: #DCFCE7; color: #15803D; padding: 3px 10px;
-        border-radius: 12px; font-weight: 800; font-size: 12px; border: 1px solid #BBF7D0; display: inline-block;
-    }}
-
-    .rem-badge {{
-        background-color: #EFF6FF; color: {COLOR_BLUE}; padding: 3px 10px;
-        border-radius: 12px; font-weight: 800; font-size: 12px; border: 1px solid #BFDBFE; display: inline-block;
-    }}
-
-    .status-attend {{
-        background-color: #DCFCE7; color: #15803D; padding: 4px 12px;
-        border-radius: 12px; font-weight: 800; font-size: 13px; border: 1px solid #BBF7D0; display: inline-block;
-    }}
-    .status-absent {{
-        background-color: #FFE4E6; color: #E11D48; padding: 4px 12px;
-        border-radius: 12px; font-weight: 800; font-size: 13px; border: 1px solid #FECDD3; display: inline-block;
-    }}
-    .status-pending {{
-        background-color: #F1F5F9; color: #64748B; padding: 4px 12px;
-        border-radius: 12px; font-weight: 800; font-size: 13px; border: 1px solid #E2E8F0; display: inline-block;
-    }}
-
-    .tr-high {{ background-color: #DCFCE7; color: #166534; padding: 4px 8px; border-radius: 6px; font-weight: 800; }}
-    .tr-mid {{ background-color: #FEF08A; color: #854D0E; padding: 4px 8px; border-radius: 6px; font-weight: 800; }}
-    .tr-low {{ background-color: #FEE2E2; color: #991B1B; padding: 4px 8px; border-radius: 6px; font-weight: 800; }}
-    .tr-check {{ background-color: #F1F5F9; color: #475569; padding: 4px 8px; border-radius: 6px; font-weight: 800; }}
-</style>
-"""
-st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
-
-
-def rerun():
-    if hasattr(st, "rerun"): st.rerun()
-    else: st.experimental_rerun()
-
 
 # =========================================================
 # 1. 컬럼 정의 & 템플릿
@@ -204,179 +100,268 @@ PRESET_ROUTINES_DF = {
     ]),
 }
 
+# =========================================================
+# 2. DB 연동 최상단 헬퍼 함수 정의 (오류 원천 수정)
+# =========================================================
+def fetch_table(table_name, columns):
+    try:
+        res = supabase.table(table_name).select("*").execute()
+        df = pd.DataFrame(res.data)
+        if df.empty:
+            return pd.DataFrame(columns=columns)
+        for col in columns:
+            if col not in df.columns: df[col] = None
+        return df[columns]
+    except Exception as e:
+        st.error(f"DB Fetch 에러 ({table_name}): {e}")
+        return pd.DataFrame(columns=columns)
 
+def get_cached_data():
+    if "members_df" not in st.session_state: st.session_state["members_df"] = fetch_table("members", MEMBERS_COLUMNS)
+    if "logs_df" not in st.session_state: st.session_state["logs_df"] = fetch_table("logs", LOGS_COLUMNS)
+    if "inbody_df" not in st.session_state: st.session_state["inbody_df"] = fetch_table("inbody", INBODY_COLUMNS)
+    if "sales_df" not in st.session_state: st.session_state["sales_df"] = fetch_table("sales", SALES_COLUMNS)
+    if "reports_df" not in st.session_state: st.session_state["reports_df"] = fetch_table("reports", REPORTS_COLUMNS)
+    if "bookings_df" not in st.session_state: st.session_state["bookings_df"] = fetch_table("bookings", BOOKINGS_COLUMNS)
+    if "consultations_df" not in st.session_state: st.session_state["consultations_df"] = fetch_table("consultations", CONSULTATIONS_COLUMNS)
+
+    return (
+        st.session_state["members_df"],
+        st.session_state["logs_df"],
+        st.session_state["inbody_df"],
+        st.session_state["sales_df"],
+        st.session_state["reports_df"],
+        st.session_state["bookings_df"],
+        st.session_state["consultations_df"]
+    )
+
+def save_data_safe(table_name, df):
+    if df.empty: return True
+    data = df.to_dict(orient="records")
+    int_fields = ["member_id", "log_id", "record_id", "sale_id", "report_id", "booking_id", "consult_id", "total_sessions", "remaining_sessions", "session_price", "age", "exp_re_sessions", "exp_re_price", "is_exp_configured", "amount", "exp_sessions", "exp_price"]
+    float_fields = ["weight", "skeletal_muscle", "body_fat_pct"]
+    bool_fields = ["sent", "delivered", "converted"]
+
+    clean_batch = []
+    for row in data:
+        clean_row = {}
+        for k, v in row.items():
+            if pd.isna(v) or v is None: clean_row[k] = None
+            elif k in int_fields: clean_row[k] = int(float(v))
+            elif k in float_fields: clean_row[k] = float(v)
+            elif k in bool_fields: clean_row[k] = bool(v)
+            else: clean_row[k] = str(v)
+        clean_batch.append(clean_row)
+
+    try:
+        supabase.table(table_name).upsert(clean_batch).execute()
+        return True
+    except Exception as e:
+        st.error(f"🚨 DB 저장 중 오류가 발생했습니다 ({table_name}): {e}")
+        return False
+
+def save_members(df): 
+    st.session_state["members_df"] = df
+    return save_data_safe("members", df)
+
+def save_logs(df): 
+    st.session_state["logs_df"] = df
+    return save_data_safe("logs", df)
+
+def save_inbody(df): 
+    st.session_state["inbody_df"] = df
+    return save_data_safe("inbody", df)
+
+def save_sales(df): 
+    st.session_state["sales_df"] = df
+    return save_data_safe("sales", df)
+
+def save_reports(df): 
+    st.session_state["reports_df"] = df
+    return save_data_safe("reports", df)
+
+def save_bookings(df): 
+    st.session_state["bookings_df"] = df
+    return save_data_safe("bookings", df)
+
+def save_consultations(df):
+    st.session_state["consultations_df"] = df
+    return save_data_safe("consultations", df)
+
+def update_attendance_log_and_session(member_id, date_str, start_time_str, end_time_str, new_att_val):
+    try:
+        logs_df = st.session_state.get("logs_df", fetch_table("logs", LOGS_COLUMNS))
+        members_df = st.session_state.get("members_df", fetch_table("members", MEMBERS_COLUMNS))
+        
+        mask = (logs_df["member_id"].astype(str) == str(member_id)) & (logs_df["date"] == date_str) & (logs_df["start_time"] == start_time_str)
+        prev_att_val = "미체크"
+        
+        if mask.any():
+            prev_att_val = str(logs_df.loc[mask, "attendance"].values[0]).strip()
+            logs_df.loc[mask, "attendance"] = new_att_val
+        else:
+            new_id = next_id(logs_df, "log_id")
+            new_row = {
+                "log_id": new_id, "member_id": member_id, "date": date_str,
+                "start_time": start_time_str, "end_time": end_time_str, "exercises_json": "[]",
+                "good_points": f"수업 {new_att_val} 처리", "improve_points": "",
+                "sent": False, "attendance": new_att_val
+            }
+            logs_df = pd.concat([logs_df, pd.DataFrame([new_row])], ignore_index=True)
+
+        save_logs(logs_df)
+
+        m_mask = members_df["member_id"].astype(str) == str(member_id)
+        if m_mask.any():
+            cur_rem = safe_int(members_df.loc[m_mask, "remaining_sessions"].values[0], 0)
+            
+            if prev_att_val in ["미체크", ""] and new_att_val in ["출석", "결석", "노쇼"]:
+                if cur_rem > 0:
+                    members_df.loc[m_mask, "remaining_sessions"] = cur_rem - 1
+                    save_members(members_df)
+            
+            elif prev_att_val in ["출석", "결석", "노쇼"] and new_att_val == "미체크":
+                members_df.loc[m_mask, "remaining_sessions"] = cur_rem + 1
+                save_members(members_df)
+
+    except Exception as e:
+        st.error(f"출결 동기화 및 세션 차감 오류: {e}")
+
+def init_all_files(): pass
+
+def next_id(df, id_col):
+    if df.empty: return 1
+    return int(pd.to_numeric(df[id_col], errors="coerce").fillna(0).max()) + 1
+
+
+# =========================================================
+# 3. 데이터 변환 & 피드백 공통 유틸
+# =========================================================
 def safe_index(lst, val, default_idx=0):
     if pd.isna(val) or val is None: return default_idx
     val_str = str(val).strip()
     return lst.index(val_str) if val_str in lst else default_idx
 
-
 def safe_float(val, default_val=0.0):
     try:
-        if pd.isna(val) or val is None:
-            return default_val
+        if pd.isna(val) or val is None: return default_val
         f = float(val)
         return default_val if pd.isna(f) else f
     except Exception:
         return default_val
 
-
 def safe_int(val, default_val=0):
     try:
-        if pd.isna(val) or val is None:
-            return default_val
+        if pd.isna(val) or val is None: return default_val
         return int(float(val))
     except Exception:
         return default_val
-
 
 def get_week_of_month(target_date):
     year, month, day = target_date.year, target_date.month, target_date.day
     cal = calendar.monthcalendar(year, month)
     for week_idx, week in enumerate(cal):
-        if day in week:
-            return f"{week_idx + 1}주차"
+        if day in week: return f"{week_idx + 1}주차"
     return "1주차"
-
 
 def get_month_weeks_list(year, month):
     cal = calendar.monthcalendar(year, month)
     return [f"{w}주차" for w in range(1, len(cal) + 1)]
 
-
 def refine_journal_feedback(text, is_good=True):
     if not text or not str(text).strip():
-        if is_good:
-            return "목표 주동근의 자극점에 정확히 집중하여 수축감을 매우 효율적으로 형성하셨습니다."
-        else:
-            return "동작 수행 시 코어 지지력과 관절 가동 범위를 지속 체크하여 움직임의 안정성을 극대화하겠습니다."
+        if is_good: return "목표 주동근의 자극점에 정확히 집중하여 수축감을 매우 효율적으로 형성하셨습니다."
+        else: return "동작 수행 시 코어 지지력과 관절 가동 범위를 지속 체크하여 움직임의 안정성을 극대화하겠습니다."
             
     t = str(text).strip()
     clean_t = re.sub(r"(이\s*)?(약하심|약함|부족함|약|하심|함|임|음|있음|있으심|보임|같음)$", "", t).strip()
     
     if is_good:
-        if re.search(r"^가슴$", clean_t):
-            return "가슴 부위 주동근(대흉근) 자극 전달에 집중하여 수축감과 견갑골 정렬을 매우 안정적으로 유지하셨습니다."
-        elif re.search(r"^등$", clean_t):
-            return "등 부위 주동근(광배근 및 승모근) 신전 시 타겟 자극을 효율적으로 집중시키며 수행하셨습니다."
-        elif re.search(r"^어깨$", clean_t):
-            return "삼각근 고립 자극 및 관절 궤적을 안정적으로 제어하며 완성도 높은 훈련을 수행하셨습니다."
-        elif re.search(r"^하체$", clean_t):
-            return "고관절 및 대퇴사두근 수축 타이밍을 정확히 맞추어 하중 분산을 안정적으로 가져가셨습니다."
-
-        if re.search(r"운동신경|신경|센스|이해|빠름|좋", clean_t):
-            return "새로운 운동 동작 패턴임에도 불구하고 우수한 운동신경과 고유수용성 감각을 바탕으로 목표 주동근 자극을 효율적으로 형성하셨습니다."
-        elif re.search(r"자극|타겟", clean_t):
-            return "목표 주동근의 정확한 타겟점을 인지하고 고립 수축 자극을 매우 효율적으로 전달하셨습니다."
-        elif re.search(r"자세|궤적", clean_t):
-            return "관절 정렬 및 동작 궤적이 매우 안정적으로 제어되어 완성도 높은 운동을 수행하셨습니다."
-        elif re.search(r"복압|코어|중심", clean_t):
-            return "호흡 패턴을 통한 코어 복압을 견고하게 유지하여 운동 수행 시 신체 하중을 안정적으로 분산하셨습니다."
-
+        if re.search(r"^가슴$", clean_t): return "가슴 부위 주동근(대흉근) 자극 전달에 집중하여 수축감과 견갑골 정렬을 매우 안정적으로 유지하셨습니다."
+        elif re.search(r"^등$", clean_t): return "등 부위 주동근(광배근 및 승모근) 신전 시 타겟 자극을 효율적으로 집중시키며 수행하셨습니다."
+        elif re.search(r"^어깨$", clean_t): return "삼각근 고립 자극 및 관절 궤적을 안정적으로 제어하며 완성도 높은 훈련을 수행하셨습니다."
+        elif re.search(r"^하체$", clean_t): return "고관절 및 대퇴사두근 수축 타이밍을 정확히 맞추어 하중 분산을 안정적으로 가져가셨습니다."
         return f"오늘 진행한 {clean_t} 수행 시 정확한 관절 정렬과 목표 주동근 자극 전달력이 매우 양호하게 관찰되었습니다."
     else:
-        if re.search(r"접지|지면|발바닥", clean_t):
-            return "하체 및 전신 동작 수행 시 발바닥 지면 접지력(Foot 삼각점 접지)과 아치 안정성을 보완하여 하중을 견고하게 지지해 드리겠습니다."
-        elif re.search(r"흔들|불안정", clean_t):
-            return "동작 수행 시 코어 복압 유지와 요·휘두 관절 복합체(LSC)의 동적 안정성을 보완하여 움직임의 흔들림을 최소화해 드리겠습니다."
-        elif re.search(r"근력|힘", clean_t):
-            return "점진적 과부하 트레이닝을 위해 주요 관절 주변부 지지 근력 및 코어 안정성을 지속적으로 보완해 나가겠습니다."
-        elif re.search(r"가동성|범위|타이트", clean_t):
-            return "타이트해진 주요 관절 주변 근막을 원활히 이완하여 정상 가동 범위(ROM)를 확보해 나가겠습니다."
-
         return f"다음 수업 시 {clean_t} 요소를 생체역학적으로 디테일하게 케어하여 더욱 부상 없이 완벽한 자세 정렬을 만들어 드리겠습니다."
 
-
 def refine_raw_text(text, category="general"):
-    if not text or not str(text).strip():
-        return "미입력 (기본 평가 데이터 없음)"
-    
+    if not text or not str(text).strip(): return "미입력 (기본 평가 데이터 없음)"
     t = str(text).strip()
     clean_t = re.sub(r"(이|가)?\s*(닫혀있으심|닫힘|약하심|약함|부족함|약|하심|있으심|있음|보임|같음|패턴가|패턴이)$", "", t).strip()
     clean_t = re.sub(r"\s+", " ", clean_t)
-
-    if category == "goal":
-        if re.search(r"벌크업|근육증량|근성장", clean_t):
-            return "점진적 과부하 트레이닝을 통한 근육량 증대 및 체격 확장(벌크업)"
-        elif re.search(r"다이어트|체지방|감량", clean_t):
-            return "체지방 순감량 및 골격근량 보존을 통한 신체 밸런스 라인 형성"
-        return f"{clean_t} 및 신체 전반의 기능적 밸런스 회복"
-
-    elif category == "posture":
-        p_text = clean_t
-        if re.search(r"전방\s*경사", p_text):
-            p_text = "골반 전방 경사(Pelvic Anterior Tilt) 양상의 요추 전만 상태"
-        elif re.search(r"후방\s*경사", p_text):
-            p_text = "골반 후방 경사(Pelvic Posterior Tilt) 양상의 요·흉추 후만 상태"
-        elif re.search(r"라운드\s*숄더|굽은\s*어깨", p_text):
-            p_text = "상지교차증후군(Upper Crossed Syndrome)에 따른 라운드 숄더"
-        return p_text
-
-    elif category == "func":
-        f_text = clean_t
-        if re.search(r"견갑|견갑골|닫혀", f_text):
-            f_text = "렛풀다운 수행 시 우측 견갑골의 불균형적 하향 회전(Depression) 및 상방 회전 가동성 제한"
-        elif re.search(r"내전근|허벅지\s*안쪽", f_text):
-            f_text = "고관절 내전근(Adductor Complex)의 활성도 저하 및 근력 약화"
-        elif re.search(r"벗윙크|스쿼트", f_text):
-            f_text = "딥 스쿼트 수행 시 굴곡 제한에 따른 벗윙크(Butt Wink) 보상 작용"
-        return f_text
-
-    elif category == "journal":
-        return f"{clean_t} 중심의 맞춤형 코어 및 정렬 지도"
-
     return clean_t
-
 
 def get_gender_badge_html(gender):
     g_str = str(gender).strip() if pd.notna(gender) else ""
-    if g_str == "여성":
-        return '<span class="gender-badge-female">👩 여성</span>'
-    elif g_str == "남성":
-        return '<span class="gender-badge-male">👨 남성</span>'
+    if g_str == "여성": return '<span class="gender-badge-female">👩 여성</span>'
+    elif g_str == "남성": return '<span class="gender-badge-male">👨 남성</span>'
     return '<span style="color:#64748B;">성별미기재</span>'
-
 
 def get_attendance_badge_html(status):
     st_str = str(status).strip() if pd.notna(status) else ""
-    if st_str in ["출석", "출석 완료"]:
-        return '<span class="status-attend">🟢 출석 완료</span>'
-    elif st_str in ["결석", "노쇼", "🔴 결석(노쇼)"]:
-        return '<span class="status-absent">🔴 노쇼 / 결석</span>'
+    if st_str in ["출석", "출석 완료"]: return '<span class="status-attend">🟢 출석 완료</span>'
+    elif st_str in ["결석", "노쇼", "🔴 결석(노쇼)"]: return '<span class="status-absent">🔴 노쇼 / 결석</span>'
     return '<span class="status-pending">⏳ 미체크</span>'
 
+def get_expect_badge_html(status_str):
+    st_val = str(status_str).strip()
+    if st_val == "높음": return '<span class="tr-high">🟢 높음</span>'
+    elif st_val == "중간": return '<span class="tr-mid">🟡 중간</span>'
+    elif st_val in ["낮음", "이탈"]: return '<span class="tr-low">🔴 ' + st_val + '</span>'
+    return '<span class="tr-check">❔ 확인중</span>'
 
 def parse_memo_blocks(raw_text):
-    if not raw_text or not str(raw_text).strip():
-        return []
-    
+    if not raw_text or not str(raw_text).strip(): return []
     pattern = r"(\[\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}\])"
     parts = re.split(pattern, str(raw_text).strip())
-    
     blocks = []
     i = 1
     while i < len(parts):
         stamp = parts[i].strip()
         body = parts[i+1].strip() if i+1 < len(parts) else ""
-        if stamp:
-            blocks.append({"stamp": stamp, "body": body})
+        if stamp: blocks.append({"stamp": stamp, "body": body})
         i += 2
-        
-    if not blocks and raw_text.strip():
-        blocks.append({"stamp": "[기존 메모 기록]", "body": raw_text.strip()})
-        
+    if not blocks and raw_text.strip(): blocks.append({"stamp": "[기존 메모 기록]", "body": raw_text.strip()})
     return blocks
-
 
 def rebuild_memo_text(blocks):
     return "\n\n".join([f"{b['stamp']}\n{b['body']}".strip() for b in blocks]).strip()
 
+def generate_friendly_message_from_data(member_id, member_name, rem_sessions, exercises_df, good, improve):
+    ex_summary = []
+    if isinstance(exercises_df, pd.DataFrame) and not exercises_df.empty:
+        for _, row in exercises_df.iterrows():
+            item = str(row.get("종목", "")).strip()
+            if item:
+                w = safe_float(row.get("중량(kg)", 0))
+                c = int(safe_float(row.get("횟수", 0)))
+                s = int(safe_float(row.get("세트", 0)))
+                ex_summary.append(f"  • {item}: {w}kg x {c}회 x {s}세트")
+
+    ex_text = "\n".join(ex_summary) if ex_summary else "  • 전신 기초 가동성 및 코어 훈련"
+    g_text = good if good else "오늘도 설정한 운동 목표 루틴을 깔끔하게 완수하셨습니다!"
+    i_text = improve if improve else "다음 수업 때는 자세 정렬에 조금 더 신경 써볼게요."
+
+    return f"""안녕하세요 {member_name} 회원님! 오늘 PT 수업도 고생 많으셨습니다. 💪
+
+[오늘 진행한 운동 루틴]
+{ex_text}
+
+[트레이너 피드백]
+✔ 잘하신 점: {g_text}
+✔ 보완할 점: {i_text}
+
+⏳ 남은 세션: {rem_sessions}회
+
+오늘도 고생하셨습니다! 다음 수업 때도 화이팅입니다! 🔥
+- 담당 트레이너 {MY_NAME} 올림 -"""
+
 
 # =========================================================
-# 3. 3-STEP 바이오 프로파일 HTML 생성기 (타입 안정성 100% 보장형)
+# 4. 3-STEP 바이오 프로파일 HTML 생성기 (완벽 방어형)
 # =========================================================
 def build_4step_report_html(member, report):
-    # [핵심 수정을 통한 NameError/KeyError 원천 차단]
     m_dict = {}
     if hasattr(member, "to_dict"):
         try: m_dict = member.to_dict()
@@ -528,7 +513,7 @@ def build_4step_report_html(member, report):
 
 
 # =========================================================
-# 4. Streamlit @st.dialog 기반 팝업 모달 정의
+# 5. Streamlit @st.dialog 기반 팝업 모달 정의
 # =========================================================
 
 if hasattr(st, "dialog"):
@@ -883,7 +868,7 @@ if hasattr(st, "dialog"):
 
 
 # =========================================================
-# 4. 페이지 1: 센터 대시보드
+# 5. 페이지 1: 센터 대시보드
 # =========================================================
 def page_dashboard(members, logs, sales, reports, bookings):
     st.title("📊 PT Account 통합 대시보드")
@@ -1299,7 +1284,7 @@ def page_dashboard(members, logs, sales, reports, bookings):
 
 
 # =========================================================
-# 5. 페이지: 통합 신규 상담 & 재등록 파이프라인 관리 탭
+# 6. 페이지: 통합 신규 상담 & 재등록 파이프라인 관리 탭
 # =========================================================
 def page_consultations(consultations, members, sales, logs):
     st.title("💡 신규 상담 & 재등록 파이프라인 관리")
@@ -1307,7 +1292,7 @@ def page_consultations(consultations, members, sales, logs):
     today = get_kst_now().date()
     curr_weeks = get_month_weeks_list(today.year, today.month)
 
-    # 1. 신규 상담 수동 세팅 기반 예상 매출 단순 합계 (미전환건 대상)
+    # 1. 신규 상담 수동 세팅 기반 예상 매출 단순 합계
     unconverted_consults = consultations[consultations["converted"] != True]
     
     consult_pipeline_amount = 0
@@ -1464,7 +1449,7 @@ def page_consultations(consultations, members, sales, logs):
                 is_conv = bool(c.get("converted", False))
                 conv_tag = '<b style="color:#166534;">🟢 회원 등록 완료</b>' if is_conv else '<b style="color:#2563EB;">⏳ 상담 진행중</b>'
                 g_badge = get_gender_badge_html(c.get("gender"))
-                
+
                 c_exp_s = safe_int(c.get("exp_sessions"), 0)
                 c_exp_p = safe_int(c.get("exp_price"), 0)
                 calc_c_exp_amt = c_exp_s * c_exp_p
@@ -1578,7 +1563,7 @@ def page_consultations(consultations, members, sales, logs):
 
 
 # =========================================================
-# 7. 페이지: 3-STEP 바이오 프로파일
+# 7. 페이지: 3-STEP 바이오 프로파일 (안전한 방어 코드 전면 도입)
 # =========================================================
 def page_bodyplan(members, reports):
     st.title("📋 PT 3-STEP 바이오 프로파일 (AI 고도화 처방)")
@@ -1600,7 +1585,7 @@ def page_bodyplan(members, reports):
         else:
             rep_status_html = '<b style="color:#DC2626;">🔴 미작성</b>'
 
-        # [수정 100% 안전성 확보] Series 객체 m에서 gender 컬럼 값 취득
+        # [수정 100% 완전 보완] Series 객체 m에서 gender 컬럼 값 취득
         m_gender_val = m.get("gender") if hasattr(m, 'get') else m["gender"]
         g_badge = get_gender_badge_html(m_gender_val)
 
@@ -1640,15 +1625,17 @@ def page_bodyplan(members, reports):
 
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # 미리보기 모달
+    # 미리보기 모달 (타입 안정화 완전 수록)
     if st.session_state.get("show_modal", False) and st.session_state.get("selected_member_id"):
         m_id = int(st.session_state.get("selected_member_id"))
-        target_m = members[pd.to_numeric(members["member_id"], errors="coerce") == m_id].iloc[0]
-        target_r = reports[pd.to_numeric(reports["member_id"], errors="coerce") == m_id]
-        r_dict = target_r.iloc[0].to_dict() if not target_r.empty else {}
+        target_m_row = members[pd.to_numeric(members["member_id"], errors="coerce") == m_id].iloc[0]
+        target_r_row = reports[pd.to_numeric(reports["member_id"], errors="coerce") == m_id]
+        
+        target_m = target_m_row.to_dict() if hasattr(target_m_row, 'to_dict') else target_m_row
+        r_dict = target_r_row.iloc[0].to_dict() if not target_r_row.empty else {}
 
         st.markdown("---")
-        st.subheader(f"📄 '{target_m['name']}' 회원의 3-STEP 바이오 프로파일 미리보기")
+        st.subheader(f"📄 '{target_m.get('name','')}' 회원의 3-STEP 바이오 프로파일 미리보기")
 
         preview_html = build_4step_report_html(target_m, r_dict)
 
@@ -2087,7 +2074,9 @@ def page_members(members, sales, bookings, logs, reports):
             rem = int(pd.to_numeric(m.get("remaining_sessions", 0), errors="coerce"))
             done = max(0, total - rem)
             has_memo = pd.notna(m.get("memo")) and str(m.get("memo")).strip() != ""
-            gender_badge = get_gender_badge_html(m.get("gender"))
+            
+            m_gender_val = m.get("gender") if hasattr(m, 'get') else m["gender"]
+            gender_badge = get_gender_badge_html(m_gender_val)
 
             st.markdown('<div class="pt-card" style="padding-bottom:10px;">', unsafe_allow_html=True)
 
@@ -2389,7 +2378,7 @@ def page_inbody(members, inbody):
 
 
 # =========================================================
-# 11. 메인 라우팅 (NameError 완벽 조치)
+# 11. 메인 라우팅 (NameError 완벽 차단 및 순서 정돈)
 # =========================================================
 def main():
     members, logs, inbody, sales, reports, bookings, consultations = get_cached_data()
