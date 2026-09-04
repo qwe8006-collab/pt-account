@@ -243,9 +243,14 @@ def refine_journal_feedback(text, is_good=True):
     else:
         return f"다음 수업 시 {clean_t} 요소를 생체역학적으로 디테일하게 케어하여 더욱 부상 없이 완벽한 자세 정렬을 만들어 드리겠습니다."
 
+# [초고도화] 오타/추임새(ㅋ,ㅎ) 자동 청정 정제 & 피트니스 전문 문장 변환 AI 엔진
 def refine_raw_text(text, category="general"):
-    if not text or not str(text).strip(): return "특별한 기능 제한 없음 (양호)"
+    if not text or not str(text).strip():
+        return "특별한 관절 기능 제한 없음 (양호)"
+
     t = str(text).strip()
+    # 1. ㅋㅋㅋ, ㅎㅎㅎ, ㅋ, ㅎ 등 오타성 추임새 문자 깨끗이 제거
+    t = re.sub(r"[ㅋㅎ|a-zA-Z]+", "", t).strip()
 
     if category == "goal":
         if re.search(r"벌크업|근육|증량|근성장", t): return "점진적 과부하 트레이닝을 통한 골격근량 증대 및 체격 확장(벌크업)"
@@ -260,21 +265,23 @@ def refine_raw_text(text, category="general"):
         clean_p = re.sub(r"(이|가)?\s*(닫혀있으심|닫힘|약하심|약함|부족함|약|하심|있으심|있음|보임|같음|관찰됨|보임|유지함|사용함|사용미숙|미숙|활용미숙|활용x|안됨)$", "", p).strip()
 
         if category == "posture":
-            if re.search(r"라운드\s*숄더|말린\s*어깨|굽은\s*어깨|어깨말림", p):
-                refined_phrases.append("상지교차증후군(Upper Crossed Syndrome) 양상의 라운드 숄더 및 견갑골 말림")
+            if re.search(r"라운드\s*숄더|말린\s*어깨|굽은\s*어깨|어깨말림|어깨말릳|말림", p):
+                refined_phrases.append("상지교차증후군(Upper Crossed Syndrome) 양상의 라운드 숄더 및 견갑골 회전 말림")
             elif re.search(r"전방\s*경사|골반전방|허리 꺾임|요추전만", p):
                 refined_phrases.append("골반 전방 경사(Pelvic Anterior Tilt)에 따른 요추 과전만 패턴")
             elif re.search(r"후방\s*경사|골반후방|플랫백|굽은허리", p):
                 refined_phrases.append("골반 후방 경사(Pelvic Posterior Tilt)에 따른 요·흉추 후만 양상")
             elif re.search(r"거북목|일자목|목통증", p):
                 refined_phrases.append("경추 전만 소실 및 경추부 방사통을 유발하는 거북목 패턴")
-            elif re.search(r"측만|불균형|어깨높이|골반높이", p):
+            elif re.search(r"불균형|비대칭|어깨높이|골반높이", p):
                 refined_phrases.append("좌우 관절 정렬 비대칭 및 체중 중심축 편차 양상")
             else:
                 refined_phrases.append(f"{clean_p} 관련 관절 정렬 편차 관찰")
 
         elif category == "func":
-            if re.search(r"횡격막|호흡|복압|숨|호흡미숙", p):
+            if re.search(r"가슴|어깨|불균형|양\s*어깨", p):
+                refined_phrases.append("대흉근 수축 및 가슴 프레스 패턴 수행 시 양측 견갑골 수축 불균형 및 흉쇄관절 비대칭")
+            elif re.search(r"횡격막|호흡|복압|숨|호흡미숙|90x90", p):
                 refined_phrases.append("호흡 수행 시 횡격막(Diaphragm) 수축 미숙 및 코어 복압(IAP) 형성 가동성 저하")
             elif re.search(r"측면\s*사슬|측면|외측사슬|측면사슬", p):
                 refined_phrases.append("동적 움직임 시 측면 운동 사슬(Lateral Kinetic Chain) 및 중둔근 활성화 제한")
@@ -290,12 +297,12 @@ def refine_raw_text(text, category="general"):
                 refined_phrases.append(f"{clean_p} 동작 수행 시 특정 보상 작용 및 움직임 제한 소견")
 
         elif category == "journal":
-            refined_phrases.append(f"{clean_p} 중심의 기초 관절 정렬 및 동작 지도")
+            refined_phrases.append(f"{clean_p} 중심의 기초 관절 정렬 및 호흡/하체 움직임 지도")
 
         else:
             refined_phrases.append(clean_p)
 
-    return " / ".join(refined_phrases) if refined_phrases else t
+    return " / ".join(refined_phrases) if refined_phrases else "관절 기능성 가동 범위 제약 소견"
 
 def get_gender_badge_html(gender):
     g_str = str(gender).strip() if pd.notna(gender) else ""
@@ -443,6 +450,38 @@ def init_all_files(): pass
 def next_id(df, id_col):
     if df.empty: return 1
     return int(pd.to_numeric(df[id_col], errors="coerce").fillna(0).max()) + 1
+
+
+def generate_friendly_message_from_data(member_id, member_name, rem_sessions, exercises_df, good, improve):
+    trainer_title_name = MY_NAME
+    ex_summary = []
+    
+    if isinstance(exercises_df, pd.DataFrame) and not exercises_df.empty:
+        for _, row in exercises_df.iterrows():
+            item = str(row.get("종목", "")).strip()
+            if item:
+                w = safe_float(row.get("중량(kg)", 0))
+                c = int(safe_float(row.get("횟수", 0)))
+                s = int(safe_float(row.get("세트", 0)))
+                ex_summary.append(f"  • {item}: {w}kg x {c}회 x {s}세트")
+
+    ex_text = "\n".join(ex_summary) if ex_summary else "  • 전신 기초 가동성 및 코어 훈련"
+    g_text = good if good else "오늘도 설정한 운동 목표 루틴을 깔끔하게 완수하셨습니다!"
+    i_text = improve if improve else "다음 수업 때는 자세 정렬에 조금 더 신경 써볼게요."
+
+    return f"""안녕하세요 {member_name} 회원님! 오늘 PT 수업도 고생 많으셨습니다. 💪
+
+[오늘 진행한 운동 루틴]
+{ex_text}
+
+[트레이너 피드백]
+✔ 잘하신 점: {g_text}
+✔ 보완할 점: {i_text}
+
+⏳ 남은 세션: {rem_sessions}회
+
+오늘도 고생하셨습니다! 다음 수업 때도 화이팅입니다! 🔥
+- 담당 트레이너 {trainer_title_name} 올림 -"""
 
 
 # =========================================================
@@ -954,7 +993,7 @@ if hasattr(st, "dialog"):
 
 
 # =========================================================
-# 6. 페이지 1: 센터 대시보드
+# 6. 페이지 1: 센터 대시보드 (회원명 클릭 수평 레이아웃 완전 정렬)
 # =========================================================
 def page_dashboard(members, logs, sales, reports, bookings):
     st.title("📊 PT Account 통합 대시보드")
@@ -1240,25 +1279,24 @@ def page_dashboard(members, logs, sales, reports, bookings):
                 att_badge = get_attendance_badge_html(att_status)
                 rem_badge = f'<span class="rem-badge">⏳ 잔여 {rem_s}회</span>'
 
-                st.markdown(f"""
-                <div style="background:#F8FAFC; border-left:4px solid {COLOR_BLUE}; border-radius:10px; padding:14px 20px; margin-bottom:8px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <div style="display:flex; align-items:center; gap:8px;">
-                            {g_badge} {rem_badge} {att_badge}
-                        </div>
-                        <div style="font-weight:800; font-size:15px; color:{COLOR_BLUE};">
-                            ⏰ {s_time} ~ {e_time}
-                        </div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                # [수정 반영 2] 회원명 + 성별 + 잔여 세션 + 출석 상태 수평 완전 정렬 레이아웃
+                st.markdown(f'<div style="background:#F8FAFC; border-left:4px solid {COLOR_BLUE}; border-radius:10px; padding:12px 18px; margin-bottom:6px;">', unsafe_allow_html=True)
+                
+                col_d_name, col_d_badges, col_d_time = st.columns([1.5, 2.5, 1.2])
 
-                col_dash_m1, _ = st.columns([1.5, 3.5])
-                with col_dash_m1:
-                    if st.button(f"👤 {m_name} 회원님", key=f"dash_m_dlg_direct_btn_{m_id}_{idx}_{s_time}"):
+                with col_d_name:
+                    if st.button(f"👤 {m_name} 회원님", key=f"dash_m_dlg_direct_btn_{m_id}_{idx}_{s_time}", use_container_width=True):
                         m_row_target = members[members["member_id"].astype(str) == str(m_id)].iloc[0]
                         if hasattr(st, "dialog"):
                             show_member_dialog(m_row_target, members, logs, inbody_df, logs, day_bookings)
+
+                with col_d_badges:
+                    st.markdown(f"<div style='padding-top:6px;'>{g_badge} &nbsp; {rem_badge} &nbsp; {att_badge}</div>", unsafe_allow_html=True)
+
+                with col_d_time:
+                    st.markdown(f"<div style='font-weight:800; font-size:15px; color:{COLOR_BLUE}; text-align:right; padding-top:6px;'>⏰ {s_time} ~ {e_time}</div>", unsafe_allow_html=True)
+
+                st.markdown('</div>', unsafe_allow_html=True)
 
                 if is_today_kst:
                     btn_c1, btn_c2, btn_c3, btn_c4 = st.columns([1, 1, 1, 1])
@@ -1505,7 +1543,6 @@ def page_consultations(consultations, members, sales, logs):
 
     main_m_tab1, main_m_tab2 = st.tabs(["💡 신규 상담 고객 관리", "🎯 기존 회원 재등록 주차별 관리"])
 
-    # === [서브 탭 1: 신규 상담 고객 관리 (컬러 뱃지 표출 강화)] ===
     with main_m_tab1:
         st.markdown("##### ➕ 신규 오프라인/온라인 상담 고객 등록")
         
@@ -1532,7 +1569,7 @@ def page_consultations(consultations, members, sales, logs):
                 conv_tag = '<b style="color:#166534;">🟢 회원 등록 완료</b>' if is_conv else '<b style="color:#2563EB;">⏳ 상담 진행중</b>'
                 g_badge = get_gender_badge_html(c.get("gender"))
                 
-                # [개선 1] 컬러 뱃지 노출 적용 (재등록 탭과 동일한 뱃지 컴포넌트)
+                # [수정 반영 1] 신규 상담 리스트 현 상태에도 컬러 뱃지 노출
                 c_expect_val = str(c.get("expect_status", "확인중")).strip()
                 expect_badge_color_html = get_expect_badge_html(c_expect_val)
 
@@ -1709,6 +1746,7 @@ def page_bodyplan(members, reports):
 
         st.markdown('</div>', unsafe_allow_html=True)
 
+    # 미리보기 모달
     if st.session_state.get("show_modal", False) and st.session_state.get("selected_member_id"):
         m_id = int(st.session_state.get("selected_member_id"))
         target_m_row = members[pd.to_numeric(members["member_id"], errors="coerce") == m_id].iloc[0]
@@ -1773,7 +1811,7 @@ def page_bodyplan(members, reports):
         )
         raw_func = st.text_input(
             "3. 움직임 체크 결과", 
-            placeholder="예시: 호흡시 횡격막근 사용 미숙, 측면사슬 활용x",
+            placeholder="예시: 가슴운동 시 양 어깨 불균형ㅋ, 호흡시 횡격막근 사용 미숙",
             key=f"input_func_{e_id}"
         )
 
@@ -1870,7 +1908,7 @@ def page_bodyplan(members, reports):
 
 
 # =========================================================
-# 9. 페이지: 수업일지 작성 (1일 1회 작성 제약 및 히스토리 수정/삭제 파이프라인 신설)
+# 9. 페이지: 수업일지 작성 (일 1회 작성 제약 및 히스토리 수정/삭제 기능)
 # =========================================================
 def page_journal(members, logs):
     st.title("📝 수업일지 작성 & 카톡 전송")
@@ -1929,7 +1967,7 @@ def page_journal(members, logs):
 
     end_time_sel = col_et.text_input("수업 종료 시간 (자동계산)", value=auto_end_time)
 
-    # [개선 1] 동일한 날짜 일지 중복 작성 방지 (일 1회 작성 제약)
+    # [수정 반영 2] 일 1회 수업일지 작성 제약 로직
     log_date_iso = log_date.isoformat()
     existing_today_log = logs[
         (logs["member_id"].astype(str) == str(m_id)) & 
@@ -1938,7 +1976,7 @@ def page_journal(members, logs):
     is_already_written = not existing_today_log.empty
 
     if is_already_written:
-        st.warning(f"⚠️ {member['name']} 회원은 {log_date_iso} 날짜에 이미 작성된 수업일지가 있습니다. (하단 복기 탭에서 수정 가능)")
+        st.warning(f"⚠️ {member['name']} 회원은 {log_date_iso} 날짜에 이미 작성된 수업일지가 있습니다. (하단 히스토리 복기 탭에서 수정해 주세요)")
 
     sel_part = st.selectbox(
         "운동 루틴 템플릿 선택 (선택 시 아래 표에 즉시 불러오기)", 
@@ -2017,7 +2055,7 @@ def page_journal(members, logs):
         st.session_state["log_saved_success"] = False
 
     st.write("")
-    # [개선 2] 이전 수업일지 복기 + 수정 및 삭제 기능 신설
+    # [수정 반영 3] 이전 수업일지 복기 히스토리 수정/삭제 파이프라인 탑재
     with st.expander(f"📜 '{m_name_str}' 회원의 이전 수업일지 & 피드백 히스토리 복기 (수정/삭제 가능)", expanded=True):
         m_logs = logs[pd.to_numeric(logs["member_id"], errors="coerce") == m_id].sort_values("date", ascending=False)
         if m_logs.empty:
