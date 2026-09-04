@@ -337,17 +337,6 @@ def get_gender_badge_html(gender):
     return '<span style="color:#64748B;">성별미기재</span>'
 
 
-def get_expect_badge_html(expect_status):
-    st_str = str(expect_status).strip() if pd.notna(expect_status) else ""
-    if st_str == "높음":
-        return '<span class="tr-high">🟢 높음</span>'
-    elif st_str == "중간":
-        return '<span class="tr-mid">🟡 중간</span>'
-    elif st_str in ["낮음", "이탈"]:
-        return '<span class="tr-low">🔴 낮음/이탈</span>'
-    return '<span class="tr-check">❔ 확인중</span>'
-
-
 def get_attendance_badge_html(status):
     st_str = str(status).strip() if pd.notna(status) else ""
     if st_str in ["출석", "출석 완료"]:
@@ -383,272 +372,159 @@ def rebuild_memo_text(blocks):
     return "\n\n".join([f"{b['stamp']}\n{b['body']}".strip() for b in blocks]).strip()
 
 
-def build_4step_report_html(target_m, r_dict):
-    """3-STEP 바이오 프로파일 미리보기용 HTML 리포트 생성"""
-    m_name = target_m.get("name", "회원")
-    m_goal = r_dict.get("goal_text") or target_m.get("goal", "다이어트 및 체형교정")
-    
-    analysis_text = (r_dict.get("analysis_text") or "분석 데이터가 없습니다.").replace("\n", "<br>")
-    p1_text = (r_dict.get("phase1_text") or "-").replace("\n", "<br>")
-    p2_text = (r_dict.get("phase2_text") or "-").replace("\n", "<br>")
-    p3_text = (r_dict.get("phase3_text") or "-").replace("\n", "<br>")
-    comment_text = (r_dict.get("trainer_comment") or "-").replace("\n", "<br>")
-    
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <style>
-            body {{ font-family: -apple-system, sans-serif; padding: 20px; background-color: #F8FAFC; color: #0F172A; }}
-            .container {{ background: #FFFFFF; border-radius: 16px; padding: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }}
-            .header {{ border-bottom: 2px solid #2563EB; padding-bottom: 12px; margin-bottom: 20px; }}
-            .title {{ font-size: 22px; font-weight: 800; color: #1E293B; }}
-            .section {{ margin-bottom: 20px; padding: 16px; background: #EFF6FF; border-radius: 12px; border-left: 4px solid #2563EB; }}
-            .section-title {{ font-size: 16px; font-weight: 800; color: #2563EB; margin-bottom: 8px; }}
-            .content {{ font-size: 14px; line-height: 1.6; color: #334155; }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <div class="title">🏋️ {m_name} 회원님 맞춤 3-STEP 바이오 프로파일</div>
-                <div style="font-size:13px; color:#64748B; margin-top:4px;">🎯 핵심 목표: {m_goal}</div>
-            </div>
-            
-            <div class="section">
-                <div class="section-title">📊 1. 신체 정밀 종합 분석</div>
-                <div class="content">{analysis_text}</div>
-            </div>
-            
-            <div class="section">
-                <div class="section-title">🚀 2. 3-STEP 맞춤 트레이닝 로드맵</div>
-                <div class="content">
-                    <b>STEP 1 (1~4주차):</b><br>{p1_text}<br><br>
-                    <b>STEP 2 (5~8주차):</b><br>{p2_text}<br><br>
-                    <b>STEP 3 (9~12주차):</b><br>{p3_text}
-                </div>
-            </div>
-            
-            <div class="section" style="background:#F1F5F9; border-left-color:#64748B;">
-                <div class="section-title" style="color:#475569;">💌 3. 담당 트레이너 코멘트</div>
-                <div class="content">{comment_text}</div>
-            </div>
-        </div>
-    </body>
-    </html>
-    """
-    return html_content
-
-
 # =========================================================
-# 2. Supabase DB 세분화 캐싱 & 예외 처리 강화
+# 3. 3-STEP 바이오 프로파일 HTML 생성기 (타입 안정성 100% 보장형)
 # =========================================================
-def fetch_table(table_name, columns):
-    try:
-        res = supabase.table(table_name).select("*").execute()
-        df = pd.DataFrame(res.data)
-        if df.empty:
-            return pd.DataFrame(columns=columns)
-        for col in columns:
-            if col not in df.columns: df[col] = None
-        return df[columns]
-    except Exception as e:
-        st.error(f"DB Fetch 에러 ({table_name}): {e}")
-        return pd.DataFrame(columns=columns)
+def build_4step_report_html(member, report):
+    # [핵심 수정을 통한 NameError/KeyError 원천 차단]
+    m_dict = {}
+    if hasattr(member, "to_dict"):
+        try: m_dict = member.to_dict()
+        except Exception: m_dict = {}
+    elif isinstance(member, dict):
+        m_dict = member
 
-def get_cached_data():
-    if "members_df" not in st.session_state: st.session_state["members_df"] = fetch_table("members", MEMBERS_COLUMNS)
-    if "logs_df" not in st.session_state: st.session_state["logs_df"] = fetch_table("logs", LOGS_COLUMNS)
-    if "inbody_df" not in st.session_state: st.session_state["inbody_df"] = fetch_table("inbody", INBODY_COLUMNS)
-    if "sales_df" not in st.session_state: st.session_state["sales_df"] = fetch_table("sales", SALES_COLUMNS)
-    if "reports_df" not in st.session_state: st.session_state["reports_df"] = fetch_table("reports", REPORTS_COLUMNS)
-    if "bookings_df" not in st.session_state: st.session_state["bookings_df"] = fetch_table("bookings", BOOKINGS_COLUMNS)
-    if "consultations_df" not in st.session_state: st.session_state["consultations_df"] = fetch_table("consultations", CONSULTATIONS_COLUMNS)
+    r_dict = {}
+    if hasattr(report, "to_dict"):
+        try: r_dict = report.to_dict()
+        except Exception: r_dict = {}
+    elif isinstance(report, dict):
+        r_dict = report
 
-    return (
-        st.session_state["members_df"],
-        st.session_state["logs_df"],
-        st.session_state["inbody_df"],
-        st.session_state["sales_df"],
-        st.session_state["reports_df"],
-        st.session_state["bookings_df"],
-        st.session_state["consultations_df"]
-    )
+    try: posture_list = json.loads(str(r_dict.get("posture_eval") or "[]"))
+    except Exception: posture_list = []
+    try: func_list = json.loads(str(r_dict.get("func_eval") or "[]"))
+    except Exception: func_list = []
 
-def save_data_safe(table_name, df):
-    if df.empty: return True
-    data = df.to_dict(orient="records")
-    int_fields = ["member_id", "log_id", "record_id", "sale_id", "report_id", "booking_id", "consult_id", "total_sessions", "remaining_sessions", "session_price", "age", "exp_re_sessions", "exp_re_price", "is_exp_configured", "amount", "exp_sessions", "exp_price"]
-    float_fields = ["weight", "skeletal_muscle", "body_fat_pct"]
-    bool_fields = ["sent", "delivered", "converted"]
+    posture_html = "".join([f"<p style='margin-bottom:8px;'><b>[{p.get('title','')}]</b><br/>{p.get('result','')}</p>" for p in posture_list]) or "<p>등록된 자세 평가가 없습니다.</p>"
+    func_html = "".join([f"<p style='margin-bottom:8px;'><b>[{f.get('title','')}]</b><br/>{f.get('result','')}</p>" for f in func_list]) or "<p>등록된 기능 평가가 없습니다.</p>"
 
-    clean_batch = []
-    for row in data:
-        clean_row = {}
-        for k, v in row.items():
-            if pd.isna(v) or v is None: clean_row[k] = None
-            elif k in int_fields: clean_row[k] = int(float(v))
-            elif k in float_fields: clean_row[k] = float(v)
-            elif k in bool_fields: clean_row[k] = bool(v)
-            else: clean_row[k] = str(v)
-        clean_batch.append(clean_row)
+    m_name = str(m_dict.get('name') or '-')
+    m_gender = str(m_dict.get('gender') or '성별미기재')
+    m_goal = str(r_dict.get('goal_text') or m_dict.get('goal') or '체형교정 및 근력강화')
+    r_date = str(r_dict.get('date') or get_kst_now().strftime("%Y-%m-%d"))
 
-    try:
-        supabase.table(table_name).upsert(clean_batch).execute()
-        return True
-    except Exception as e:
-        st.error(f"🚨 DB 저장 중 오류가 발생했습니다 ({table_name}): {e}")
-        return False
+    html = f"""
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<title>{m_name} 회원의 3-STEP 바이오 프로파일</title>
+<style>
+  @page {{ size: A4 portrait; margin: 0; }}
+  *, *:before, *:after {{ box-sizing: border-box; }}
+  html, body {{ 
+    width: 210mm; margin: 0; padding: 0;
+    background-color: #FFFFFF; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+    color: #0F172A; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }}
 
-def save_members(df): 
-    st.session_state["members_df"] = df
-    return save_data_safe("members", df)
+  .no-print-bar {{
+    background: #1E293B; padding: 12px 20px; text-align: center;
+    position: sticky; top: 0; z-index: 9999; box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+  }}
+  .print-btn {{
+    background-color: {COLOR_BLUE}; color: white; border: none;
+    padding: 10px 24px; border-radius: 8px; font-size: 15px; font-weight: bold;
+    cursor: pointer; transition: background 0.2s ease;
+  }}
+  .print-btn:hover {{ background-color: #1D4ED8; }}
 
-def save_logs(df): 
-    st.session_state["logs_df"] = df
-    return save_data_safe("logs", df)
+  .cover-sheet {{
+    width: 210mm; height: 297mm; padding: 25mm 20mm; margin: 0 auto;
+    background: linear-gradient(135deg, {COLOR_NAVY} 0%, #0F172A 100%);
+    color: #FFFFFF; display: flex; flex-direction: column; justify-content: space-between;
+    page-break-after: always; page-break-inside: avoid;
+  }}
+  .cover-title {{ font-size: 42px; font-weight: 900; line-height: 1.2; letter-spacing: -1.5px; margin-top: 35mm; }}
+  .cover-badge {{ background: {COLOR_BLUE}; display: inline-block; padding: 8px 20px; border-radius: 30px; font-size: 18px; font-weight: 800; margin-top: 20px; }}
+  .cover-meta {{ border-top: 2px solid rgba(255,255,255,0.2); padding-top: 20px; font-size: 15px; line-height: 1.8; }}
 
-def save_inbody(df): 
-    st.session_state["inbody_df"] = df
-    return save_data_safe("inbody", df)
+  .sheet {{ width: 210mm; min-height: 297mm; padding: 15mm 20mm; margin: 0 auto; background: #FFFFFF; }}
+  .header {{ border-bottom: 3px solid {COLOR_BLUE}; padding-bottom: 12px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; }}
+  .sec-title {{ font-size: 17px; font-weight: 800; color: {COLOR_NAVY}; border-left: 5px solid {COLOR_BLUE}; padding-left: 10px; margin: 18px 0 10px; }}
+  .content-card {{ background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 16px; font-size: 13.5px; line-height: 1.6; color: #334155; margin-bottom: 12px; }}
+  .grid-2 {{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }}
 
-def save_sales(df): 
-    st.session_state["sales_df"] = df
-    return save_data_safe("sales", df)
+  @media print {{
+    .no-print-bar {{ display: none !important; }}
+    body {{ background: #fff; width: 100%; }}
+    .cover-sheet {{ height: 297mm !important; max-height: 297mm !important; margin: 0; page-break-after: always; }}
+    .sheet {{ margin: 0; min-height: 297mm; page-break-after: always; }}
+  }}
+</style>
+</head>
+<body>
 
-def save_reports(df): 
-    st.session_state["reports_df"] = df
-    return save_data_safe("reports", df)
+  <div class="no-print-bar">
+    <button class="print-btn" onclick="window.print();">🖨️ PDF 저장 및 인쇄하기</button>
+  </div>
 
-def save_bookings(df): 
-    st.session_state["bookings_df"] = df
-    return save_data_safe("bookings", df)
+  <div class="cover-sheet">
+    <div>
+      <div style="font-size: 13px; font-weight: 800; color: #60A5FA; letter-spacing: 2px;">SPECIAL BIO-PROFILE REPORT</div>
+      <div class="cover-title">3-STEP 바이오 프로파일<br/><span style="font-size:24px; font-weight:600; color:#93C5FD;">[맞춤 체형 정밀 분석 & 바이오 프로파일 로드맵]</span></div>
+      <div class="cover-badge">3 STEP PT</div>
+    </div>
+    <div class="cover-meta">
+      <b>회원명:</b> {m_name} ({m_gender})<br/>
+      <b>운동 목표:</b> {m_goal}<br/>
+      <b>발행일자:</b> {r_date}<br/>
+      <div style="margin-top: 8px; color: #94A3B8; font-size: 12.5px;">회원님의 신체 바이오 메커니즘을 정밀 분석하여 작성된 체계적인 3단계 맞춤 프로파일 리포트입니다.</div>
+      <div style="margin-top: 16px; font-size: 17px; font-weight: 800; color: #60A5FA;">담당 : {MY_NAME} 트레이너</div>
+    </div>
+  </div>
 
-def save_consultations(df):
-    st.session_state["consultations_df"] = df
-    return save_data_safe("consultations", df)
+  <div class="sheet">
+    <div class="header">
+      <div>
+        <div style="font-size: 20px; font-weight: 900; color: {COLOR_NAVY};">1. 신체 정밀 바이오 프로파일 분석</div>
+        <div style="font-size: 12px; color: #64748B;">이름: {m_name} | 성별: {m_gender} | 담당: {MY_NAME} 트레이너</div>
+      </div>
+    </div>
 
-def update_attendance_log_and_session(member_id, date_str, start_time_str, end_time_str, new_att_val):
-    try:
-        logs_df = st.session_state.get("logs_df", fetch_table("logs", LOGS_COLUMNS))
-        members_df = st.session_state.get("members_df", fetch_table("members", MEMBERS_COLUMNS))
-        
-        mask = (logs_df["member_id"].astype(str) == str(member_id)) & (logs_df["date"] == date_str) & (logs_df["start_time"] == start_time_str)
-        prev_att_val = "미체크"
-        
-        if mask.any():
-            prev_att_val = str(logs_df.loc[mask, "attendance"].values[0]).strip()
-            logs_df.loc[mask, "attendance"] = new_att_val
-        else:
-            new_id = next_id(logs_df, "log_id")
-            new_row = {
-                "log_id": new_id, "member_id": member_id, "date": date_str,
-                "start_time": start_time_str, "end_time": end_time_str, "exercises_json": "[]",
-                "good_points": f"수업 {new_att_val} 처리", "improve_points": "",
-                "sent": False, "attendance": new_att_val
-            }
-            logs_df = pd.concat([logs_df, pd.DataFrame([new_row])], ignore_index=True)
+    <div class="content-card" style="background:{COLOR_ICE}; border-color:#BFDBFE;">
+      <b>🎯 운동 목적:</b> {r_dict.get('goal_text','-')}<br/><br/>
+      <b>💡 신체 정밀 종합 분석:</b><br/>
+      <div style="white-space: pre-wrap; margin-top:4px;">{r_dict.get('analysis_text','-')}</div>
+    </div>
 
-        save_logs(logs_df)
+    <div class="sec-title">자세 / 움직임 정밀 체크</div>
+    <div class="grid-2">
+      <div class="content-card">
+        <h4 style="margin:0 0 8px; color:{COLOR_BLUE};">📐 자세 정밀 분석 (Posture)</h4>
+        {posture_html}
+      </div>
+      <div class="content-card">
+        <h4 style="margin:0 0 8px; color:{COLOR_BLUE};">🏃 움직임 가동성 분석 (Movement)</h4>
+        {func_html}
+      </div>
+    </div>
 
-        m_mask = members_df["member_id"].astype(str) == str(member_id)
-        if m_mask.any():
-            cur_rem = safe_int(members_df.loc[m_mask, "remaining_sessions"].values[0], 0)
-            
-            if prev_att_val in ["미체크", ""] and new_att_val in ["출석", "결석", "노쇼"]:
-                if cur_rem > 0:
-                    members_df.loc[m_mask, "remaining_sessions"] = cur_rem - 1
-                    save_members(members_df)
-            
-            elif prev_att_val in ["출석", "결석", "노쇼"] and new_att_val == "미체크":
-                members_df.loc[m_mask, "remaining_sessions"] = cur_rem + 1
-                save_members(members_df)
+    <div class="sec-title">2. 3-STEP 맞춤 트레이닝 로드맵 (Phase 1 ~ 3)</div>
+    <div class="content-card">
+      <b style="color:{COLOR_BLUE};">STEP 1 [1~4주차: 굳은 관절 이완 & 바른 호흡 정렬 익히기]</b><br/>
+      <div style="white-space: pre-wrap; margin-top:4px;">{r_dict.get('phase1_text','-')}</div>
+    </div>
+    <div class="content-card">
+      <b style="color:{COLOR_BLUE};">STEP 2 [5~8주차: 타겟 근육 고립 & 차근차근 부하 적용]</b><br/>
+      <div style="white-space: pre-wrap; margin-top:4px;">{r_dict.get('phase2_text','-')}</div>
+    </div>
+    <div class="content-card">
+      <b style="color:{COLOR_BLUE};">STEP 3 [9~12주차: 체력 및 근지구력 극대화 & 자율 독립 루틴 완성]</b><br/>
+      <div style="white-space: pre-wrap; margin-top:4px;">{r_dict.get('phase3_text','-')}</div>
+    </div>
 
-    except Exception as e:
-        st.error(f"출결 동기화 및 세션 차감 오류: {e}")
+    <div class="sec-title">3. {MY_NAME} 트레이너 마스터 코멘트</div>
+    <div class="content-card" style="line-height:1.8;">
+      <div style="white-space: pre-wrap;">{r_dict.get('trainer_comment','-')}</div>
+    </div>
+  </div>
 
-def next_id(df, id_col):
-    if df.empty: return 1
-    return int(pd.to_numeric(df[id_col], errors="coerce").fillna(0).max()) + 1
-
-
-def generate_friendly_message_from_data(member_id, member_name, rem_sessions, exercises_df, good, improve):
-    ex_summary = []
-    weight_increases = []
-
-    logs_df = st.session_state.get("logs_df", fetch_table("logs", LOGS_COLUMNS))
-    m_past_logs = logs_df[pd.to_numeric(logs_df["member_id"], errors="coerce") == int(member_id)]
-
-    past_max_weights = {}
-    if not m_past_logs.empty:
-        for _, plog in m_past_logs.iterrows():
-            try:
-                plist = json.loads(plog.get("exercises_json") or "[]")
-                for pex in plist:
-                    pitem = pex.get("종목", "").strip()
-                    pw = safe_float(pex.get("중량(kg)", 0))
-                    if pitem and pw > 0:
-                        if pitem not in past_max_weights or pw > past_max_weights[pitem]:
-                            past_max_weights[pitem] = pw
-            except Exception:
-                pass
-
-    if isinstance(exercises_df, pd.DataFrame) and not exercises_df.empty:
-        for _, row in exercises_df.iterrows():
-            item = str(row.get("종목", "")).strip()
-            if item:
-                w = safe_float(row.get("중량(kg)", 0))
-                c = int(safe_float(row.get("횟수", 0)))
-                s = int(safe_float(row.get("세트", 0)))
-                ex_summary.append(f"  • {item}: {w}kg x {c}회 x {s}세트")
-
-                if item in past_max_weights:
-                    prev_w = past_max_weights[item]
-                    if w > prev_w:
-                        diff = round(w - prev_w, 1)
-                        weight_increases.append(f"🔥 {item} ({prev_w}kg ➡️ {w}kg, +{diff}kg 상승!)")
-
-    ex_text = "\n".join(ex_summary) if ex_summary else "  • 전신 기초 가동성 및 코어 훈련"
-    g_text = good if good else "오늘도 설정한 운동 목표 루틴을 깔끔하게 완수하셨습니다!"
-    i_text = improve if improve else "다음 수업 때는 자세 정렬에 조금 더 신경 써볼게요."
-
-    overload_text = ""
-    if weight_increases:
-        overload_text = "\n\n[💪 점진적 과부하 갱신!]\n" + "\n".join(weight_increases)
-
-    next_class_text = ""
-    try:
-        bookings_df = st.session_state.get("bookings_df", fetch_table("bookings", BOOKINGS_COLUMNS))
-        today_str = get_kst_now().date().isoformat()
-        
-        user_future_bookings = bookings_df[
-            (bookings_df["member_id"].astype(str) == str(member_id)) &
-            (bookings_df["status"] != "취소") &
-            (bookings_df["date"] >= today_str)
-        ].sort_values(by=["date", "time_slot"])
-
-        if not user_future_bookings.empty:
-            next_b = user_future_bookings.iloc[0]
-            next_date_str = str(next_b["date"])
-            next_time_str = str(next_b["time_slot"])
-            next_class_text = f"\n🗓️ 다음 수업 일정: {next_date_str} ({next_time_str})"
-    except Exception:
-        next_class_text = ""
-
-    return f"""안녕하세요 {member_name} 회원님! 오늘 PT 수업도 고생 많으셨습니다. 💪
-
-[오늘 진행한 운동 루틴]
-{ex_text}{overload_text}
-
-[트레이너 피드백]
-✔ 잘하신 점: {g_text}
-✔ 보완할 점: {i_text}
-
-⏳ 남은 세션: {rem_sessions}회{next_class_text}
-
-오늘도 고생하셨습니다! 다음 수업 때도 화이팅입니다! 🔥
-- 담당 트레이너 {MY_NAME} 올림 -"""
+</body>
+</html>
+"""
+    return html
 
 
 # =========================================================
@@ -1702,7 +1578,7 @@ def page_consultations(consultations, members, sales, logs):
 
 
 # =========================================================
-# 7. 페이지: 3-STEP 바이오 프로파일 (안전한 성별 Badge 처리 수정)
+# 7. 페이지: 3-STEP 바이오 프로파일
 # =========================================================
 def page_bodyplan(members, reports):
     st.title("📋 PT 3-STEP 바이오 프로파일 (AI 고도화 처방)")
@@ -1724,6 +1600,7 @@ def page_bodyplan(members, reports):
         else:
             rep_status_html = '<b style="color:#DC2626;">🔴 미작성</b>'
 
+        # [수정 100% 안전성 확보] Series 객체 m에서 gender 컬럼 값 취득
         m_gender_val = m.get("gender") if hasattr(m, 'get') else m["gender"]
         g_badge = get_gender_badge_html(m_gender_val)
 
@@ -1852,7 +1729,7 @@ def page_bodyplan(members, reports):
 {analysis_body}"""
 
             st.session_state[f"ai_posture_text_{e_id}"] = f"체형 정렬 평가: {refined_posture}"
-            st.session_state[f"ai_func_text_{e_id}"] = f"동작 가동성 평가: {refined_func}"
+            st.session_state[f"ai_func_text_{e_id}"] = f"움직임 가동성 평가: {refined_func}"
 
             st.session_state[f"ta_p1_{e_id}"] = f"STEP 1 [1-4주차: 관절 이완 & 호흡 정렬 익히기]\n• 타이트해진 근막 이완 및 호흡 정렬\n• 훈련 성과 반영: {refined_journal}"
             st.session_state[f"ta_p2_{e_id}"] = f"STEP 2 [5-8주차: 타겟 근육 고립 & 차근차근 부하 적용]\n• 보상 작용 없이 주동근 고립 자극 전달\n• 개선 과제 반영: {refined_posture} 케어"
@@ -2210,9 +2087,7 @@ def page_members(members, sales, bookings, logs, reports):
             rem = int(pd.to_numeric(m.get("remaining_sessions", 0), errors="coerce"))
             done = max(0, total - rem)
             has_memo = pd.notna(m.get("memo")) and str(m.get("memo")).strip() != ""
-            
-            m_gender_val = m.get("gender") if hasattr(m, 'get') else m["gender"]
-            gender_badge = get_gender_badge_html(m_gender_val)
+            gender_badge = get_gender_badge_html(m.get("gender"))
 
             st.markdown('<div class="pt-card" style="padding-bottom:10px;">', unsafe_allow_html=True)
 
